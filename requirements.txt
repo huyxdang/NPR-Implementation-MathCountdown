@@ -1,0 +1,16 @@
+# NSR (Negative Sample Reinforcement) Implementation
+# Python 3.10+
+
+# Core dependencies
+torch>=2.0.0
+transformers>=4.35.0
+datasets>=2.14.0
+vllm>=0.2.0
+
+# Training utilities
+tensorboard>=2.14.0
+python-dotenv>=1.0.0
+
+# Optional but recommended
+flash-attn>=2.3.0
+
