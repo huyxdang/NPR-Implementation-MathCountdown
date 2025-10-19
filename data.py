@@ -10,10 +10,10 @@ def load_countdown(split="train"):
     for ex in train_dataset: 
         target = ex["target"]
         nums = ex["nums"]
-        prompt = f"Using numbers {nums}, make {target}. 
+        prompt = f"""Using numbers {nums}, make {target}. 
         You must use all numbers, each number only once, 
         and with operations + - / * only.
-        Do reasoning steps inside <think> </think> and put your final answer in <answer> </answer>."
+        Do reasoning steps inside <think> </think> and put your final answer in <answer> </answer>."""
         samples.append({
             prompt: prompt,
             nums: nums,
