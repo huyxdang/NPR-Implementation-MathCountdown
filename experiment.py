@@ -415,13 +415,13 @@ def get_response_log_probs(model: PreTrainedModel, input_ids: torch.Tensor, labe
 
 
 # Training helpers and loop
-def duplicate_data(arr: List, group_size: int) -> List:
-    return [x for x in arr for _ in range(group_size)]
+def duplicate_data(arr: List, rollouts_per_prompt: int) -> List:
+    return [x for x in arr for _ in range(rollouts_per_prompt)]
 
 
-def rollout_with_vllm(policy: PreTrainedModel, llm: LLM, sampling_params: SamplingParams, prompts_batch: List[str], group_size: int) -> Tuple[List[str], List[str], List[int]]:
+def rollout_with_vllm(policy: PreTrainedModel, llm: LLM, sampling_params: SamplingParams, prompts_batch: List[str], rollouts_per_prompt: int) -> Tuple[List[str], List[str], List[int]]:
     load_policy_into_vllm_instance(policy, llm)
-    prompts_dup = duplicate_data(prompts_batch, group_size)
+    prompts_dup = duplicate_data(prompts_batch, rollouts_per_prompt)
     vllm_rollouts = llm.generate(prompts_dup, sampling_params, use_tqdm=False)
     rollout_input_text, rollout_response_text, rollout_output_tokens = [], [], []
     for rollout in vllm_rollouts:
@@ -472,7 +472,7 @@ def train(
     policy: PreTrainedModel, tokenizer: AutoTokenizer, llm: LLM, sampling_params: SamplingParams, *,
     train_prompts: List[str], train_answers: List[Dict], eval_prompts: List[str], eval_answers: List[Dict],
     optimizer: torch.optim.Optimizer, scheduler, n_train_steps: int, rollout_batch_size: int,
-    group_size: int, gradient_accumulation_steps: int, clip_range: float,
+    rollouts_per_prompt: int, gradient_accumulation_steps: int, clip_range: float,
     device: str, eval_every: int = 5, writer: SummaryWriter = None, seed: int,
     objective: RLObjective = RLObjective.NSR, lambda_psr: float = 0.1,
 ) -> None:
@@ -496,8 +496,8 @@ def train(
         optimizer: Optimizer for policy parameters
         scheduler: Learning rate scheduler
         n_train_steps: Number of training steps
-        rollout_batch_size: Total samples per rollout (group_size * num_prompts)
-        group_size: Number of responses per prompt
+        rollout_batch_size: Total samples per rollout (rollouts_per_prompt * num_prompts)
+        rollouts_per_prompt: Number of responses per prompt
         gradient_accumulation_steps: Gradient accumulation steps
         clip_range: PPO clipping epsilon
         use_std_normalization: Whether to normalize advantages by std
@@ -511,7 +511,7 @@ def train(
         objective: RLVR objective (RLVR/PSR/NSR/W_REINFORCE)
         lambda_psr: Weight for correct samples in W-REINFORCE
     """
-    n_prompts_per_rollout_batch = rollout_batch_size // group_size
+    n_prompts_per_rollout_batch = rollout_batch_size // rollouts_per_prompt
     micro_train_batch_size = rollout_batch_size // gradient_accumulation_steps
     random.seed(seed)
     train_step = 0
@@ -529,8 +529,8 @@ def train(
     for _ in range(n_train_steps):
         sampled = random.sample(list(zip(train_prompts, train_answers)), n_prompts_per_rollout_batch)
         prompts_batch, answers_batch = [p for p, _ in sampled], [a for _, a in sampled]
-        rollout_input, rollout_response, rollout_tokens = rollout_with_vllm(policy, llm, sampling_params, prompts_batch, group_size)
-        answers_dup = duplicate_data(answers_batch, group_size)
+        rollout_input, rollout_response, rollout_tokens = rollout_with_vllm(policy, llm, sampling_params, prompts_batch, rollouts_per_prompt)
+        answers_dup = duplicate_data(answers_batch, rollouts_per_prompt)
         avg_output_tokens = sum(rollout_tokens) / len(rollout_tokens) if rollout_tokens else 0.0
                 
         # Apply objective-specific reward weighting and sample filtering
@@ -567,8 +567,8 @@ def train(
         else:
             rollout_batch_size_effective = rollout_batch_size
 
-        # Ensure length is a multiple of group_size (needed for .view(-1, group_size))
-        rem = rollout_batch_size_effective % group_size
+        # Ensure length is a multiple of rollouts_per_prompt (needed for .view(-1, rollouts_per_prompt))
+        rem = rollout_batch_size_effective % rollouts_per_prompt
         if rem != 0:
             cut = rollout_batch_size_effective - rem
             rollout_input        = rollout_input[:cut]
@@ -665,13 +665,13 @@ def parse_args():
                         help="Random seed for reproducibility")
     parser.add_argument("--n_train_steps", type=int, default=120,
                         help="Number of training steps")
-    parser.add_argument("--rollout_batch_size", type=int, default=128,
-                        help="Rollout batch size")
-    parser.add_argument("--group_size", type=int, default=8,
-                        help="Group size for advantage normalization")
+    parser.add_argument("--rollout_batch_size", type=int, default=512,
+                        help="Total rollout samples (num_prompts × rollouts_per_prompt)")
+    parser.add_argument("--rollouts_per_prompt", type=int, default=8,
+                        help="Number of rollouts to generate per prompt (paper uses 8)")
     parser.add_argument("--grad_acc_steps", type=int, default=16,
                         help="Gradient accumulation steps")
-    parser.add_argument("--lr", type=float, default=5e-6,
+    parser.add_argument("--lr", type=float, default=1e-6,
                         help="Learning rate")
     parser.add_argument("--clip_range", type=float, default=0.2,
                         help="PPO clip range")
@@ -713,28 +713,34 @@ def main() -> None:
     gpu_mem_util = args.gpu_mem_util
     n_train_steps = args.n_train_steps
     rollout_batch_size = args.rollout_batch_size
-    group_size = args.group_size
+    rollouts_per_prompt = args.rollouts_per_prompt
     grad_acc_steps = args.grad_acc_steps
     lr = args.lr
     clip_range = args.clip_range
     temperature = args.temperature
-    min_tokens = 4  # Keep this fixed
+    min_tokens = 128
     eval_every = args.eval_every
     max_tokens = args.max_tokens
     lambda_psr = args.lambda_psr
     
     # Print experiment configuration
+    num_prompts = rollout_batch_size // rollouts_per_prompt
+    
     print(f"\n{'='*70}")
     print(f"Starting Experiment: {exp_name}")
     print(f"{'='*70}")
-    print(f"Objective:       {args.objective}")
-    print(f"Max Tokens:      {max_tokens}")
+    print(f"Objective:           {args.objective}")
+    print(f"Max Tokens:          {max_tokens}")
     if args.objective == "W_REINFORCE":
-        print(f"Lambda (PSR):    {lambda_psr}")
-    print(f"Model:           {model_id}")
-    print(f"Train Steps:     {n_train_steps}")
-    print(f"Learning Rate:   {lr}")
-    print(f"Seed:            {seed}")
+        print(f"Lambda (PSR):        {lambda_psr}")
+    print(f"Model:               {model_id}")
+    print(f"Train Steps:         {n_train_steps}")
+    print(f"Rollout Batch Size:  {rollout_batch_size} ({num_prompts} prompts × {rollouts_per_prompt} rollouts)")
+    print(f"Grad Acc Steps:      {grad_acc_steps}")
+    print(f"Learning Rate:       {lr}")
+    print(f"Clip Range:          {clip_range}")
+    print(f"Temperature:         {temperature}")
+    print(f"Seed:                {seed}")
     print(f"{'='*70}\n")
     
     # Initialization (vLLM first to allocate contiguous KV cache memory before policy fragments it)
@@ -782,7 +788,7 @@ def main() -> None:
         train_prompts=[ex["prompt"] for ex in train_examples], train_answers=[ex["answer"] for ex in train_examples],
         eval_prompts=[ex["prompt"] for ex in eval_examples], eval_answers=[ex["answer"] for ex in eval_examples],
         optimizer=optimizer, scheduler=scheduler, n_train_steps=n_train_steps,
-        rollout_batch_size=rollout_batch_size, group_size=group_size,
+        rollout_batch_size=rollout_batch_size, rollouts_per_prompt=rollouts_per_prompt,
         gradient_accumulation_steps=grad_acc_steps, clip_range=clip_range,
         device=device, eval_every=eval_every, writer=writer, seed=seed,
         objective=objective, lambda_psr=lambda_psr
