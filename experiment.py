@@ -665,11 +665,11 @@ def parse_args():
                         help="Random seed for reproducibility")
     parser.add_argument("--n_train_steps", type=int, default=120,
                         help="Number of training steps")
-    parser.add_argument("--rollout_batch_size", type=int, default=512,
+    parser.add_argument("--rollout_batch_size", type=int, default=256,
                         help="Total rollout samples (num_prompts × rollouts_per_prompt)")
-    parser.add_argument("--rollouts_per_prompt", type=int, default=8,
+    parser.add_argument("--rollouts_per_prompt", type=int, default=4,
                         help="Number of rollouts to generate per prompt (paper uses 8)")
-    parser.add_argument("--grad_acc_steps", type=int, default=16,
+    parser.add_argument("--grad_acc_steps", type=int, default=8,
                         help="Gradient accumulation steps")
     parser.add_argument("--lr", type=float, default=1e-6,
                         help="Learning rate")
