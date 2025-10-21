@@ -1,47 +1,42 @@
-# NSR (Negative Sample Reinforcement) Implementation
+# RLVR (Reinforcement Learning with Verifiable Rewards) Implementation
 # Based on: "The Surprising Effectiveness of Negative Reinforcement in LLM Reasoning"
 # Paper: https://arxiv.org/pdf/2506.01347
 #
-# KEY CHANGES FROM starter.py (GRPO):
+# This implementation supports multiple RL objectives for training language models
+# on reasoning tasks with binary verifiable rewards.
 #
-# 1. BINARY REWARD FUNCTION (line ~196)
-#    - Changed from {0, 0.1, 1.0} to {-1, +1}
+# KEY COMPONENTS:
+#
+# 1. BINARY REWARD FUNCTION (line ~226)
+#    - Returns {-1, +1} based on correctness
 #    - +1 if correct (has <answer>, valid numbers, equals target)
-#    - -1 otherwise (matches paper's verifiable reward setup)
+#    - -1 otherwise (strict pass/fail evaluation)
 #
-# 2. NEW: RLObjective ENUM (line ~334)
+# 2. RLObjective ENUM (line ~357)
 #    - RLVR: Standard baseline (all samples, ±1 rewards)
 #    - PSR: Positive Sample Reinforcement (only correct samples)
 #    - NSR: Negative Sample Reinforcement (only incorrect samples)
 #    - W_REINFORCE: Weighted-REINFORCE (correct=+λ, incorrect=-1)
 #
-# 3. NEW: make_weighted_rewards() (line ~340)
+# 3. make_weighted_rewards() (line ~363)
 #    - Applies objective-specific reward weighting
-#    - Filters samples for PSR/NSR
+#    - Filters samples for PSR/NSR objectives
 #    - Returns: weighted_rewards, keep_mask
 #
-# 4. MODIFIED: compute_group_normalized_advantages() (line ~299)
-#    - Added precomputed_rewards parameter
-#    - Can now accept pre-weighted rewards
-#    - Enables NSR/PSR/W-REINFORCE advantage computation
+# 4. compute_group_normalized_advantages() (line ~322)
+#    - Group-based advantage normalization for variance reduction
+#    - Accepts precomputed rewards for objective-specific weighting
+#    - Supports both std normalization (RLVR) and without (DR variants)
 #
-# 5. MODIFIED: train() function (line ~515)
-#    - Added objective and lambda_psr parameters
-#    - Sample filtering logic after rollout (lines ~560-587)
+# 5. train() function (line ~538)
+#    - Main training loop with rollout generation and policy updates
+#    - Sample filtering logic for PSR/NSR objectives
 #    - Ensures batch size is multiple of group_size
-#    - Uses effective batch size for loss averaging
+#    - PPO-style clipped surrogate loss optimization
 #
-# 6. NEW: NSR METRICS LOGGING (lines ~547-558)
-#    - samples/correct_ratio: Learning progress (should increase)
-#    - filtering/samples_kept: Sample efficiency (varies by objective)
-#
-# 7. MODIFIED: main() (line ~639)
-#    - Added objective selection (line ~635)
-#    - Added lambda_psr hyperparameter (line ~636)
-#    - Passes these to train() function
 #
 # USAGE:
-#   Change line ~635 to switch objectives:
+#   In main(), set the objective (line ~659):
 #   - objective = RLObjective.W_REINFORCE  (paper's best, λ=0.1)
 #   - objective = RLObjective.NSR          (only train on mistakes)
 #   - objective = RLObjective.PSR          (only train on correct)
@@ -54,6 +49,8 @@ from typing import Callable, Dict, List, Tuple, Any
 import logging
 import warnings
 import math
+import argparse
+import json
 
 import torch
 import torch.nn.functional as F
@@ -182,7 +179,6 @@ def _validate_numbers(equation_str: str, available_numbers: List[int]) -> bool:
     Returns:
         True if the equation uses the correct numbers, False otherwise.
     """
-    ### YOUR CODE HERE ###
     try: 
         # Extract all numbers from the equation 
         found_numbers = re.findall(r"\d+", equation_str)
@@ -265,15 +261,14 @@ def evaluate_model(llm: LLM, sampling_params: SamplingParams, eval_prompts: List
     rewards_tensor = torch.tensor(rewards) if rewards else torch.tensor([0.0])
     tol = 1e-8
     count_correct = sum(1 for r in rewards if abs(r - 1.0) < tol)
-    count_partial = sum(1 for r in rewards if abs(r - 0.1) < tol)
-    count_failed = sum(1 for r in rewards if abs(r - 0.0) < tol)
+    count_incorrect = sum(1 for r in rewards if abs(r - (-1.0)) < tol)
     accuracy = (count_correct / len(rewards)) * 100 if rewards else 0.0
     avg_output_tokens = sum(output_token_lengths) / len(output_token_lengths) if output_token_lengths else 0.0
     return {
         "mean_reward": float(rewards_tensor.mean().item()),
         "std_reward": float(rewards_tensor.std().item()) if rewards_tensor.numel() > 1 else 0.0,
         "num_examples": len(rewards), "examples": examples, "count_correct": count_correct,
-        "count_partial": count_partial, "count_failed": count_failed, "accuracy": accuracy,
+        "count_incorrect": count_incorrect, "accuracy": accuracy,
         "avg_output_tokens": avg_output_tokens,
     }
 
@@ -303,27 +298,21 @@ def log_eval(metrics: Dict[str, Any], writer: SummaryWriter | None, step: int) -
     if not examples: return
     tol = 1e-8
     correct_examples = [ex for ex in examples if abs(float(ex.get("reward", 0.0)) - 1.0) < tol][:10]
-    partial_examples = [ex for ex in examples if abs(float(ex.get("reward", 0.0)) - 0.1) < tol][:10]
-    failed_examples = [ex for ex in examples if abs(float(ex.get("reward", 0.0)) - 0.0) < tol][:10]
+    incorrect_examples = [ex for ex in examples if abs(float(ex.get("reward", 0.0)) - (-1.0)) < tol][:10]
     if correct_examples:
-        print(f"\n=== Eval examples (CORRECT, reward=1.0) @ step {step} ===")
+        print(f"\n=== Eval examples (CORRECT, reward=+1) @ step {step} ===")
         for idx, ex in enumerate(correct_examples[:2], 1): print(f"[CORRECT #{idx}]\n" + _format_eval_example(ex))
-    if partial_examples:
-        print(f"\n=== Eval examples (PARTIAL, reward=0.1) @ step {step} ===")
-        for idx, ex in enumerate(partial_examples[:2], 1): print(f"[PARTIAL #{idx}]\n" + _format_eval_example(ex))
-    if failed_examples:
-        print(f"\n=== Eval examples (FAILED, reward=0.0) @ step {step} ===")
-        for idx, ex in enumerate(failed_examples[:2], 1): print(f"[FAILED #{idx}]\n" + _format_eval_example(ex))
+    if incorrect_examples:
+        print(f"\n=== Eval examples (INCORRECT, reward=-1) @ step {step} ===")
+        for idx, ex in enumerate(incorrect_examples[:2], 1): print(f"[INCORRECT #{idx}]\n" + _format_eval_example(ex))
     if writer:
         correct_text = "\n\n".join([_format_eval_example(ex) for ex in correct_examples]) or ""
-        partial_text = "\n\n".join([_format_eval_example(ex) for ex in partial_examples]) or ""
-        failed_text = "\n\n".join([_format_eval_example(ex) for ex in failed_examples]) or ""
+        incorrect_text = "\n\n".join([_format_eval_example(ex) for ex in incorrect_examples]) or ""
         if correct_text: writer.add_text("eval/examples_correct", correct_text, global_step=step)
-        if partial_text: writer.add_text("eval/examples_partial", partial_text, global_step=step)
-        if failed_text: writer.add_text("eval/examples_failed", failed_text, global_step=step)
+        if incorrect_text: writer.add_text("eval/examples_incorrect", incorrect_text, global_step=step)
     print(f"Eval @ step {step}: accuracy={metrics['accuracy']:.1f}% mean_reward={metrics['mean_reward']:.4f} "
           f"avg_tokens={metrics['avg_output_tokens']:.1f} | correct:{metrics['count_correct']} "
-          f"partial:{metrics['count_partial']} failed:{metrics['count_failed']}")
+          f"incorrect:{metrics['count_incorrect']}")
 
 
 def compute_group_normalized_advantages(
@@ -405,7 +394,7 @@ def make_weighted_rewards(rollout_responses, repeated_ground_truths, base_reward
 
 
 # ==============================================================================
-# TASK 4: Implement per-token Loss
+# Per-token PPO Loss Computation
 # ==============================================================================
 def compute_loss(
     advantages: torch.Tensor,
@@ -416,10 +405,8 @@ def compute_loss(
     """
     Computes the per-token PPO clipped surrogate loss.
 
-    Why omit the KL divergence term?
-    For simplicity and following trends in recent RLVR (e.g Dr.GRPO),
-    we omit the KL penalty term often found in PPO. This simplifies the implementation
-    and has been shown to work well in practice.
+    This is a standard PPO objective without KL penalty, which has been shown
+    to work well in practice for RLVR-style training with binary rewards.
 
     Steps:
     1. Calculate the probability ratio `pi_ratio = exp(policy_log_probs - old_log_probs)`.
@@ -459,6 +446,8 @@ def compute_loss(
 def masked_mean(tensor: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
     """
     Compute the mean of tensor values where mask=True for each row, then average across the batch.
+    
+    This is the standard loss aggregation method that normalizes by actual response length.
     """
     ### YOUR CODE HERE ###
     # Convert mask to float for proper multiplication
@@ -476,10 +465,12 @@ def masked_mean(tensor: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
     ### END YOUR CODE ###
     return loss
 
-def masked_mean_drgrpo(tensor: torch.Tensor, mask: torch.Tensor, num_tokens: int) -> torch.Tensor:
+def masked_mean_length_normalized(tensor: torch.Tensor, mask: torch.Tensor, num_tokens: int) -> torch.Tensor:
     """
     Compute the sum of tensor values where mask=True, divided by num_tokens, then average across the batch.
-    This is used for the DR-GRPO loss
+    
+    This is the length-robust variant that normalizes by a fixed max_completion_length
+    instead of actual response length, reducing bias towards shorter responses.
     """
     ### YOUR CODE HERE ###
     # Convert mask to float for proper multiplication
@@ -522,19 +513,37 @@ def tokenize_rollouts(rollout_input_text: List[str], rollout_response_text: List
     return tokenize_prompt_and_output(rollout_input_text, rollout_response_text, tokenizer)
 
 
-def grpo_microbatch_step(
+def rlvr_microbatch_step(
     policy: PreTrainedModel, input_ids: torch.Tensor, labels: torch.Tensor, response_mask: torch.Tensor,
     advantages_per_seq: torch.Tensor, gradient_accumulation_steps: int, clip_range: float,
-    loss_type: str = "grpo", max_completion_length: int = 512,
+    loss_type: str = "standard", max_completion_length: int = 512,
 ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
+    """
+    Performs a single microbatch optimization step for RLVR training.
+    
+    Args:
+        policy: The language model being trained
+        input_ids: Input token IDs [batch, seq_len]
+        labels: Target token IDs [batch, seq_len]
+        response_mask: Mask for response tokens [batch, seq_len]
+        advantages_per_seq: Normalized advantages [batch]
+        gradient_accumulation_steps: Number of gradient accumulation steps
+        clip_range: PPO clipping epsilon
+        loss_type: "standard" or "length_normalized"
+        max_completion_length: Max length for length-normalized variant
+    
+    Returns:
+        loss: Detached loss value
+        metadata: Dictionary with ratio statistics
+    """
     policy_log_probs = get_response_log_probs(policy, input_ids, labels)
     old_log_probs = policy_log_probs.detach()
     advantages = advantages_per_seq.unsqueeze(-1)
     loss_per_token, metadata = compute_loss(advantages, policy_log_probs, old_log_probs, clip_range)
-    if loss_type == "grpo":
+    if loss_type == "standard":
         loss = masked_mean(loss_per_token, response_mask)
-    elif loss_type == "dr_grpo":
-        loss = masked_mean_drgrpo(loss_per_token, response_mask, max_completion_length)
+    elif loss_type == "length_normalized":
+        loss = masked_mean_length_normalized(loss_per_token, response_mask, max_completion_length)
     else:
         raise ValueError(f"Unknown loss type: {loss_type}")
     loss = loss / gradient_accumulation_steps
@@ -545,12 +554,47 @@ def grpo_microbatch_step(
 def train(
     policy: PreTrainedModel, tokenizer: AutoTokenizer, llm: LLM, sampling_params: SamplingParams, *,
     train_prompts: List[str], train_answers: List[Dict], eval_prompts: List[str], eval_answers: List[Dict],
-    optimizer: torch.optim.Optimizer, scheduler, n_grpo_steps: int, rollout_batch_size: int,
+    optimizer: torch.optim.Optimizer, scheduler, n_train_steps: int, rollout_batch_size: int,
     group_size: int, gradient_accumulation_steps: int, clip_range: float, use_std_normalization: bool,
     advantage_eps: float, device: str, eval_every: int = 5, writer: SummaryWriter = None, seed: int,
-    loss_type: str = "grpo", max_completion_length: int = 256,
+    loss_type: str = "standard", max_completion_length: int = 256,
     objective: RLObjective = RLObjective.RLVR, lambda_psr: float = 0.1,
 ) -> None:
+    """
+    Main RLVR training loop.
+    
+    Performs iterative policy improvement through:
+    1. Rollout generation using current policy
+    2. Reward computation and advantage normalization
+    3. PPO-style policy optimization with clipping
+    
+    Args:
+        policy: Language model to train
+        tokenizer: Tokenizer for the model
+        llm: vLLM instance for fast rollout generation
+        sampling_params: Sampling configuration
+        train_prompts: Training prompts
+        train_answers: Ground truth answers for training
+        eval_prompts: Evaluation prompts
+        eval_answers: Ground truth answers for evaluation
+        optimizer: Optimizer for policy parameters
+        scheduler: Learning rate scheduler
+        n_train_steps: Number of training steps
+        rollout_batch_size: Total samples per rollout (group_size * num_prompts)
+        group_size: Number of responses per prompt
+        gradient_accumulation_steps: Gradient accumulation steps
+        clip_range: PPO clipping epsilon
+        use_std_normalization: Whether to normalize advantages by std
+        advantage_eps: Epsilon for numerical stability
+        device: Device for training
+        eval_every: Evaluate every N steps
+        writer: TensorBoard writer
+        seed: Random seed
+        loss_type: "standard" or "length_normalized"
+        max_completion_length: Max length for length-normalized variant
+        objective: RLVR objective (RLVR/PSR/NSR/W_REINFORCE)
+        lambda_psr: Weight for correct samples in W-REINFORCE
+    """
     n_prompts_per_rollout_batch = rollout_batch_size // group_size
     micro_train_batch_size = rollout_batch_size // gradient_accumulation_steps
     random.seed(seed)
@@ -558,11 +602,11 @@ def train(
 
     metrics = evaluate_model(llm, sampling_params, eval_prompts, eval_answers)
     if writer:
-        for k in ["accuracy", "mean_reward", "std_reward", "avg_output_tokens", "count_correct", "count_partial", "count_failed"]:
+        for k in ["accuracy", "mean_reward", "std_reward", "avg_output_tokens", "count_correct", "count_incorrect"]:
             writer.add_scalar(f"eval/{k}", metrics[k], global_step=train_step)
         log_eval(metrics, writer, train_step)
 
-    for _ in range(n_grpo_steps):
+    for _ in range(n_train_steps):
         sampled = random.sample(list(zip(train_prompts, train_answers)), n_prompts_per_rollout_batch)
         prompts_batch, answers_batch = [p for p, _ in sampled], [a for _, a in sampled]
         rollout_input, rollout_response, rollout_tokens = rollout_with_vllm(policy, llm, sampling_params, prompts_batch, group_size)
@@ -625,7 +669,7 @@ def train(
         rollout_loss = 0.0
         for micro_idx in range(0, rollout_batch_size_effective, micro_train_batch_size):
             s = slice(micro_idx, micro_idx + micro_train_batch_size)
-            loss, _ = grpo_microbatch_step(
+            loss, _ = rlvr_microbatch_step(
                 policy,
                 tokenized["input_ids"][s].to(device),
                 tokenized["labels"][s].to(device),
@@ -642,7 +686,7 @@ def train(
         grad_norm = torch.nn.utils.clip_grad_norm_([p for p in policy.parameters() if p.grad is not None], 1.0)
         optimizer.step()
         scheduler.step()
-        rollout_loss /= (rollout_batch_size_effective / micro_train_batch_size)
+        # Note: rollout_loss is already scaled by gradient_accumulation_steps in rlvr_microbatch_step
         train_step += 1
         print(f"Step {train_step} | Loss: {rollout_loss:.4f} | Grad: {grad_norm:.4f} | "
               f"Reward mean: {reward_meta['mean']:.4f} | Reward std: {reward_meta['std']:.4f} | "
@@ -662,24 +706,115 @@ def init_policy(model_id: str, device: str) -> Tuple[PreTrainedModel, AutoTokeni
     return model, tokenizer
 
 
-def main() -> None:
-    objective = RLObjective.W_REINFORCE  # choices: RLVR, PSR, NSR, W_REINFORCE
-    lambda_psr = 0.1                     # paper recommended 
-    # Hyperparameters
-    model_id = "Qwen/Qwen3-1.7B"
-    device = "cuda"
-    seed, gpu_mem_util = 42, 0.4
-    n_grpo_steps, rollout_batch_size, group_size, grad_acc_steps = 200, 128, 8, 32
-    lr, clip_range, adv_eps = 1e-6, 0.2, 1e-6
-    temperature, min_tokens = 1.0, 4
-    eval_every = 10
+def parse_args():
+    """Parse command-line arguments for experiment configuration."""
+    parser = argparse.ArgumentParser(
+        description="NSR (Negative Sample Reinforcement) Experiments on Math Countdown",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
+    
+    # Experiment configuration
+    parser.add_argument("--objective", type=str, default="NSR", 
+                        choices=["RLVR", "PSR", "NSR", "W_REINFORCE"],
+                        help="RL objective to use")
+    parser.add_argument("--max_tokens", type=int, default=256,
+                        help="Maximum tokens for generation")
+    parser.add_argument("--lambda_psr", type=float, default=0.1,
+                        help="Weight for correct samples in W-REINFORCE objective")
+    
+    # Model configuration
+    parser.add_argument("--model_id", type=str, default="Qwen/Qwen3-1.7B",
+                        help="HuggingFace model ID")
+    parser.add_argument("--device", type=str, default="cuda",
+                        help="Device to use for training")
+    
+    # Training hyperparameters
+    parser.add_argument("--seed", type=int, default=42,
+                        help="Random seed for reproducibility")
+    parser.add_argument("--n_train_steps", type=int, default=200,
+                        help="Number of training steps")
+    parser.add_argument("--rollout_batch_size", type=int, default=128,
+                        help="Rollout batch size")
+    parser.add_argument("--group_size", type=int, default=8,
+                        help="Group size for advantage normalization")
+    parser.add_argument("--grad_acc_steps", type=int, default=16,
+                        help="Gradient accumulation steps")
+    parser.add_argument("--lr", type=float, default=3e-6,
+                        help="Learning rate")
+    parser.add_argument("--clip_range", type=float, default=0.2,
+                        help="PPO clip range")
+    parser.add_argument("--temperature", type=float, default=0.7,
+                        help="Sampling temperature")
+    parser.add_argument("--eval_every", type=int, default=10,
+                        help="Evaluate every N steps")
+    parser.add_argument("--gpu_mem_util", type=float, default=0.4,
+                        help="GPU memory utilization for vLLM")
+    
+    # Loss configuration
+    parser.add_argument("--loss_type", type=str, default="standard",
+                        choices=["standard", "length_normalized"],
+                        help="Type of loss computation")
+    
+    # Experiment tracking
+    parser.add_argument("--exp_name", type=str, default=None,
+                        help="Custom experiment name (auto-generated if not provided)")
+    parser.add_argument("--output_dir", type=str, default="./output",
+                        help="Output directory for logs and models")
+    
+    return parser.parse_args()
 
-    # CHANGING HYPERPARAMETERS for main assignment
-    loss_type = "grpo" # or "dr_grpo"
-    max_tokens = 256 # or 512, 1024
+
+def main() -> None:
+    # Parse command-line arguments
+    args = parse_args()
+    
+    # Convert string objective to enum
+    objective = RLObjective[args.objective]
+    
+    # Auto-generate experiment name if not provided
+    if args.exp_name is None:
+        exp_name = f"{args.objective}_tokens{args.max_tokens}"
+        if args.objective == "W_REINFORCE":
+            exp_name += f"_lambda{args.lambda_psr}"
+    else:
+        exp_name = args.exp_name
+    
+    # Extract hyperparameters from args
+    model_id = args.model_id
+    device = args.device
+    seed = args.seed
+    gpu_mem_util = args.gpu_mem_util
+    n_train_steps = args.n_train_steps
+    rollout_batch_size = args.rollout_batch_size
+    group_size = args.group_size
+    grad_acc_steps = args.grad_acc_steps
+    lr = args.lr
+    clip_range = args.clip_range
+    adv_eps = 1e-4  # Keep this fixed
+    temperature = args.temperature
+    min_tokens = 4  # Keep this fixed
+    eval_every = args.eval_every
+    loss_type = args.loss_type
+    max_tokens = args.max_tokens
+    lambda_psr = args.lambda_psr
+    
+    # Print experiment configuration
+    print(f"\n{'='*70}")
+    print(f"Starting Experiment: {exp_name}")
+    print(f"{'='*70}")
+    print(f"Objective:       {args.objective}")
+    print(f"Max Tokens:      {max_tokens}")
+    print(f"Loss Type:       {loss_type}")
+    if args.objective == "W_REINFORCE":
+        print(f"Lambda (PSR):    {lambda_psr}")
+    print(f"Model:           {model_id}")
+    print(f"Train Steps:     {n_train_steps}")
+    print(f"Learning Rate:   {lr}")
+    print(f"Seed:            {seed}")
+    print(f"{'='*70}\n")
     
     # Initialization
-    use_std_norm = loss_type == "grpo"
+    use_std_norm = loss_type == "standard"
     policy, tokenizer = init_policy(model_id=model_id, device=device)
     llm = init_vllm(model_id=model_id, device=device, seed=seed, gpu_memory_utilization=gpu_mem_util)
     sampling_params = init_sampling_params(temperature=temperature, min_tokens=min_tokens, max_tokens=max_tokens)
@@ -707,18 +842,19 @@ def main() -> None:
     optimizer = torch.optim.AdamW(policy.parameters(), lr=lr, weight_decay=1e-2, betas=(0.9, 0.95))
     scheduler = get_constant_schedule_with_warmup(optimizer=optimizer, num_warmup_steps=0)
     
-    # Logging
+    # Logging with experiment name
     timestamp = int(datetime.datetime.now(datetime.timezone.utc).timestamp())
-    log_dir = os.path.join("./output", "tb", f"hw_a2_{loss_type}", str(timestamp))
+    log_dir = os.path.join(args.output_dir, "tb", exp_name, str(timestamp))
     os.makedirs(log_dir, exist_ok=True)
     writer = SummaryWriter(log_dir=log_dir)
+    print(f"TensorBoard logs: {log_dir}\n")
     
     # Training
     train(
         policy=policy, tokenizer=tokenizer, llm=llm, sampling_params=sampling_params,
         train_prompts=[ex["prompt"] for ex in train_examples], train_answers=[ex["answer"] for ex in train_examples],
         eval_prompts=[ex["prompt"] for ex in eval_examples], eval_answers=[ex["answer"] for ex in eval_examples],
-        optimizer=optimizer, scheduler=scheduler, n_grpo_steps=n_grpo_steps,
+        optimizer=optimizer, scheduler=scheduler, n_train_steps=n_train_steps,
         rollout_batch_size=rollout_batch_size, group_size=group_size,
         gradient_accumulation_steps=grad_acc_steps, clip_range=clip_range,
         use_std_normalization=use_std_norm, advantage_eps=adv_eps, device=device,
@@ -727,12 +863,24 @@ def main() -> None:
         objective=objective, lambda_psr=lambda_psr
     )
     
-    # Save model
-    out_dir = os.path.join("./output", f"hw_a2_solution_{timestamp}")
+    # Save model with experiment name
+    out_dir = os.path.join(args.output_dir, "models", exp_name, str(timestamp))
     os.makedirs(out_dir, exist_ok=True)
     policy.save_pretrained(out_dir)
     tokenizer.save_pretrained(out_dir)
-    print(f"Saved model and tokenizer to {out_dir}")
+    
+    # Save experiment configuration for reproducibility
+    config_dict = vars(args).copy()
+    config_dict["timestamp"] = timestamp
+    config_dict["exp_name"] = exp_name
+    with open(os.path.join(out_dir, "experiment_config.json"), "w") as f:
+        json.dump(config_dict, f, indent=2)
+    
+    print(f"\n{'='*70}")
+    print(f"Experiment Complete: {exp_name}")
+    print(f"Model saved to:      {out_dir}")
+    print(f"Logs saved to:       {log_dir}")
+    print(f"{'='*70}\n")
     writer.close()
 
 if __name__ == "__main__":
