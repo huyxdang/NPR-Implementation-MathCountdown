@@ -319,6 +319,13 @@ def log_eval(metrics: Dict[str, Any], writer: SummaryWriter | None, step: int) -
           f"incorrect:{metrics['count_incorrect']}")
 
 
+class RLObjective(str, Enum):
+    RLVR = "rlvr"            # use all samples, rewards = {+1, -1}
+    PSR = "psr"              # keep only correct samples
+    NSR = "nsr"              # keep only incorrect samples
+    W_REINFORCE = "w_reinforce"  # rewards = {+λ, -1}
+
+
 def compute_group_normalized_advantages(
     rollout_responses: List[str],
     repeated_ground_truths: List[Dict],
@@ -359,12 +366,6 @@ def compute_group_normalized_advantages(
     }
     return advantages, raw_rewards, metadata
 
-
-class RLObjective(str, Enum):
-    RLVR = "rlvr"            # use all samples, rewards = {+1, -1}
-    PSR = "psr"              # keep only correct samples
-    NSR = "nsr"              # keep only incorrect samples
-    W_REINFORCE = "w_reinforce"  # rewards = {+λ, -1}
 
 def make_weighted_rewards(rollout_responses, repeated_ground_truths, base_reward_fn, objective: RLObjective, lambda_psr: float = 0.1):
     """
