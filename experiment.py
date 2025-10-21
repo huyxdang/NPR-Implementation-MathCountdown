@@ -1,50 +1,6 @@
 # RLVR (Reinforcement Learning with Verifiable Rewards) Implementation
 # Based on: "The Surprising Effectiveness of Negative Reinforcement in LLM Reasoning"
 # Paper: https://arxiv.org/pdf/2506.01347
-#
-# This implementation supports multiple RL objectives for training language models
-# on reasoning tasks with binary verifiable rewards.
-#
-# KEY COMPONENTS:
-#
-# 1. BINARY REWARD FUNCTION (line ~222)
-#    - Returns {-1, +1} based on correctness
-#    - +1 if correct (has <answer>, valid numbers, equals target)
-#    - -1 otherwise (strict pass/fail evaluation)
-#
-# 2. RLObjective ENUM (line ~353)
-#    - RLVR: Standard baseline (all samples, ±1 rewards)
-#    - PSR: Positive Sample Reinforcement (only correct samples)
-#    - NSR: Negative Sample Reinforcement (only incorrect samples)
-#    - W_REINFORCE: Weighted-REINFORCE (correct=+λ, incorrect=-1)
-#
-# 3. make_weighted_rewards() (line ~359)
-#    - Applies objective-specific reward weighting
-#    - Filters samples for PSR/NSR objectives
-#    - Returns: weighted_rewards, keep_mask
-#
-# 4. compute_group_normalized_advantages() (line ~318)
-#    - Group-based advantage normalization for variance reduction
-#    - Accepts precomputed rewards for objective-specific weighting
-#    - Supports both std normalization (RLVR) and without (DR variants)
-#
-# 5. train() function (line ~554)
-#    - Main training loop with rollout generation and policy updates
-#    - Sample filtering logic for PSR/NSR objectives
-#    - Ensures batch size is multiple of group_size
-#    - PPO-style clipped surrogate loss optimization
-#
-#
-# USAGE:
-#   Run experiments via command-line arguments:
-#
-#   python experiment.py --objective NSR --max_tokens 256
-#   python experiment.py --objective PSR --max_tokens 512
-#   python experiment.py --objective W_REINFORCE --max_tokens 256 --lambda_psr 0.3
-#   python experiment.py --objective RLVR --max_tokens 512
-#
-#   For all options: python experiment.py --help
-#   Or use: bash run_experiments.sh  (runs all 9 planned experiments)
 
 import os
 import datetime
@@ -320,44 +276,24 @@ def log_eval(metrics: Dict[str, Any], writer: SummaryWriter | None, step: int) -
 
 
 class RLObjective(str, Enum):
-    RLVR = "rlvr"            # use all samples, rewards = {+1, -1}
     PSR = "psr"              # keep only correct samples
     NSR = "nsr"              # keep only incorrect samples
     W_REINFORCE = "w_reinforce"  # rewards = {+λ, -1}
 
 
-def compute_group_normalized_advantages(
-    rollout_responses: List[str],
-    repeated_ground_truths: List[Dict],
-    reward_fn: Callable[[str, Dict], float],
-    group_size: int,
-    advantage_eps: float,
-    normalize_by_std: bool,
-    precomputed_rewards: torch.Tensor | None = None,
-    objective: RLObjective = RLObjective.RLVR, 
+def compute_advantages(
+    precomputed_rewards: torch.Tensor,
 ) -> Tuple[torch.Tensor, torch.Tensor, Dict[str, torch.Tensor]]:
-    # 1) compute or use provided rewards
-    if precomputed_rewards is None:
-        rewards = [reward_fn(resp, gt) for resp, gt in zip(rollout_responses, repeated_ground_truths)]
-        raw_rewards = torch.tensor(rewards, dtype=torch.float32)
-    else:
-        raw_rewards = precomputed_rewards.float()
-
-    # 2) For NSR/PSR/W-REINFORCE: use raw rewards as advantages (no normalization)
-    # Paper uses rewards directly as learning signal, not group-normalized advantages
-    if objective in [RLObjective.NSR, RLObjective.PSR, RLObjective.W_REINFORCE]:
-        advantages = raw_rewards
-    else:
-        # RLVR only: apply group normalization
-        rewards_grouped = raw_rewards.view(-1, group_size)
-        group_mean = rewards_grouped.mean(dim=1, keepdim=True)
-        group_std = rewards_grouped.std(dim=1, keepdim=True, unbiased=False)
-
-        advantages = rewards_grouped - group_mean
-        if normalize_by_std:
-            advantages = advantages / (group_std + advantage_eps)
-        advantages = advantages.flatten()
-
+    """
+    Compute advantages for NSR/PSR/W-REINFORCE objectives.
+    
+    Uses raw rewards directly as advantages (no group normalization).
+    The paper shows that for these objectives, the reward signal itself
+    is sufficient and group normalization would destroy the learning signal.
+    """
+    raw_rewards = precomputed_rewards.float()
+    advantages = raw_rewards  # No normalization - use rewards directly
+    
     metadata = {
         "mean": torch.mean(raw_rewards),
         "std": torch.std(raw_rewards, unbiased=False),
@@ -377,10 +313,7 @@ def make_weighted_rewards(rollout_responses, repeated_ground_truths, base_reward
     rewards = []
     keep = []
     for rv in raw:
-        if objective == RLObjective.RLVR:
-            rewards.append(rv)  # +1 or -1
-            keep.append(True)
-        elif objective == RLObjective.PSR:
+        if objective == RLObjective.PSR:
             keep.append(rv > 0)
             if rv > 0:
                 rewards.append(1.0)
@@ -397,7 +330,7 @@ def make_weighted_rewards(rollout_responses, repeated_ground_truths, base_reward
                 rewards.append(-1.0)
                 keep.append(True)
         else:
-            raise ValueError(objective)
+            raise ValueError(f"Unknown objective: {objective}")
     rewards = torch.tensor(rewards, dtype=torch.float32)
     keep_mask = torch.tensor(keep, dtype=torch.bool)
     return rewards, keep_mask
@@ -476,25 +409,6 @@ def masked_mean(tensor: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
     ### END YOUR CODE ###
     return loss
 
-def masked_mean_length_normalized(tensor: torch.Tensor, mask: torch.Tensor, num_tokens: int) -> torch.Tensor:
-    """
-    Compute the sum of tensor values where mask=True, divided by num_tokens, then average across the batch.
-    
-    This is the length-robust variant that normalizes by a fixed max_completion_length
-    instead of actual response length, reducing bias towards shorter responses.
-    """
-    ### YOUR CODE HERE ###
-    # Convert mask to float for proper multiplication
-    mask = mask.float()
-    
-    masked_sum = (tensor * mask).sum(dim=1)
-    
-    # Divide by fixed constant num_tokens (same for all sequences)
-    mean_per_seq = masked_sum / float(num_tokens)
-    loss = mean_per_seq.mean()
-    ### END YOUR CODE ###
-    return loss
-
 def get_response_log_probs(model: PreTrainedModel, input_ids: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
     logits = model(input_ids).logits
     log_probs = F.log_softmax(logits, dim=-1)
@@ -524,24 +438,23 @@ def tokenize_rollouts(rollout_input_text: List[str], rollout_response_text: List
     return tokenize_prompt_and_output(rollout_input_text, rollout_response_text, tokenizer)
 
 
-def rlvr_microbatch_step(
+def rl_microbatch_step(
     policy: PreTrainedModel, input_ids: torch.Tensor, labels: torch.Tensor, response_mask: torch.Tensor,
     advantages_per_seq: torch.Tensor, gradient_accumulation_steps: int, clip_range: float,
-    loss_type: str = "standard", max_completion_length: int = 512,
 ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
     """
-    Performs a single microbatch optimization step for RLVR training.
+    Performs a single microbatch optimization step for NSR/PSR/W-REINFORCE training.
+    
+    Uses standard masked mean loss (normalizes by actual response length per sequence).
     
     Args:
         policy: The language model being trained
         input_ids: Input token IDs [batch, seq_len]
         labels: Target token IDs [batch, seq_len]
         response_mask: Mask for response tokens [batch, seq_len]
-        advantages_per_seq: Normalized advantages [batch]
+        advantages_per_seq: Advantages (raw rewards) [batch]
         gradient_accumulation_steps: Number of gradient accumulation steps
         clip_range: PPO clipping epsilon
-        loss_type: "standard" or "length_normalized"
-        max_completion_length: Max length for length-normalized variant
     
     Returns:
         loss: Detached loss value
@@ -551,12 +464,7 @@ def rlvr_microbatch_step(
     old_log_probs = policy_log_probs.detach()
     advantages = advantages_per_seq.unsqueeze(-1)
     loss_per_token, metadata = compute_loss(advantages, policy_log_probs, old_log_probs, clip_range)
-    if loss_type == "standard":
-        loss = masked_mean(loss_per_token, response_mask)
-    elif loss_type == "length_normalized":
-        loss = masked_mean_length_normalized(loss_per_token, response_mask, max_completion_length)
-    else:
-        raise ValueError(f"Unknown loss type: {loss_type}")
+    loss = masked_mean(loss_per_token, response_mask)
     loss = loss / gradient_accumulation_steps
     loss.backward()
     return loss.detach(), metadata
@@ -566,13 +474,12 @@ def train(
     policy: PreTrainedModel, tokenizer: AutoTokenizer, llm: LLM, sampling_params: SamplingParams, *,
     train_prompts: List[str], train_answers: List[Dict], eval_prompts: List[str], eval_answers: List[Dict],
     optimizer: torch.optim.Optimizer, scheduler, n_train_steps: int, rollout_batch_size: int,
-    group_size: int, gradient_accumulation_steps: int, clip_range: float, use_std_normalization: bool,
-    advantage_eps: float, device: str, eval_every: int = 5, writer: SummaryWriter = None, seed: int,
-    loss_type: str = "standard", max_completion_length: int = 256,
-    objective: RLObjective = RLObjective.RLVR, lambda_psr: float = 0.1,
+    group_size: int, gradient_accumulation_steps: int, clip_range: float,
+    device: str, eval_every: int = 5, writer: SummaryWriter = None, seed: int,
+    objective: RLObjective = RLObjective.NSR, lambda_psr: float = 0.1,
 ) -> None:
     """
-    Main RLVR training loop.
+    Main training loop for NSR/PSR/W-REINFORCE objectives.
     
     Performs iterative policy improvement through:
     1. Rollout generation using current policy
@@ -666,9 +573,8 @@ def train(
                 # skip this iteration if nothing remains
                 continue
 
-        # Compute advantages using precomputed (possibly weighted) rewards
-        advantages, _, reward_meta = compute_group_normalized_advantages(
-            rollout_response, answers_dup, reward_fn, group_size, advantage_eps, use_std_normalization,
+        # Compute advantages (uses raw rewards directly for NSR/PSR/W-REINFORCE)
+        advantages, _, reward_meta = compute_advantages(
             precomputed_rewards=weighted_rewards
         )
 
@@ -680,14 +586,13 @@ def train(
         rollout_loss = 0.0
         for micro_idx in range(0, rollout_batch_size_effective, micro_train_batch_size):
             s = slice(micro_idx, micro_idx + micro_train_batch_size)
-            loss, _ = rlvr_microbatch_step(
+            loss, _ = rl_microbatch_step(
                 policy,
                 tokenized["input_ids"][s].to(device),
                 tokenized["labels"][s].to(device),
                 tokenized["response_mask"][s].to(device),
                 advantages[s].to(device),
-                gradient_accumulation_steps, clip_range, loss_type=loss_type,
-                max_completion_length=max_completion_length
+                gradient_accumulation_steps, clip_range
             )
             rollout_loss += float(loss.item())
 
@@ -697,7 +602,7 @@ def train(
         grad_norm = torch.nn.utils.clip_grad_norm_([p for p in policy.parameters() if p.grad is not None], 1.0)
         optimizer.step()
         scheduler.step()
-        # Note: rollout_loss is already scaled by gradient_accumulation_steps in rlvr_microbatch_step
+        # Note: rollout_loss is already scaled by gradient_accumulation_steps in rl_microbatch_step
         train_step += 1
         print(f"Step {train_step} | Loss: {rollout_loss:.4f} | Grad: {grad_norm:.4f} | "
               f"Reward mean: {reward_meta['mean']:.4f} | Reward std: {reward_meta['std']:.4f} | "
@@ -726,7 +631,7 @@ def parse_args():
     
     # Experiment configuration
     parser.add_argument("--objective", type=str, default="NSR", 
-                        choices=["RLVR", "PSR", "NSR", "W_REINFORCE"],
+                        choices=["PSR", "NSR", "W_REINFORCE"],
                         help="RL objective to use")
     parser.add_argument("--max_tokens", type=int, default=256,
                         help="Maximum tokens for generation")
@@ -760,11 +665,6 @@ def parse_args():
                         help="Evaluate every N steps")
     parser.add_argument("--gpu_mem_util", type=float, default=0.4,
                         help="GPU memory utilization for vLLM")
-    
-    # Loss configuration
-    parser.add_argument("--loss_type", type=str, default="standard",
-                        choices=["standard", "length_normalized"],
-                        help="Type of loss computation")
     
     # Experiment tracking
     parser.add_argument("--exp_name", type=str, default=None,
@@ -801,11 +701,9 @@ def main() -> None:
     grad_acc_steps = args.grad_acc_steps
     lr = args.lr
     clip_range = args.clip_range
-    adv_eps = 1e-4  # Keep this fixed
     temperature = args.temperature
     min_tokens = 4  # Keep this fixed
     eval_every = args.eval_every
-    loss_type = args.loss_type
     max_tokens = args.max_tokens
     lambda_psr = args.lambda_psr
     
@@ -815,7 +713,6 @@ def main() -> None:
     print(f"{'='*70}")
     print(f"Objective:       {args.objective}")
     print(f"Max Tokens:      {max_tokens}")
-    print(f"Loss Type:       {loss_type}")
     if args.objective == "W_REINFORCE":
         print(f"Lambda (PSR):    {lambda_psr}")
     print(f"Model:           {model_id}")
@@ -825,7 +722,6 @@ def main() -> None:
     print(f"{'='*70}\n")
     
     # Initialization
-    use_std_norm = loss_type == "standard"
     policy, tokenizer = init_policy(model_id=model_id, device=device)
     llm = init_vllm(model_id=model_id, device=device, seed=seed, gpu_memory_utilization=gpu_mem_util)
     sampling_params = init_sampling_params(temperature=temperature, min_tokens=min_tokens, max_tokens=max_tokens)
@@ -868,9 +764,7 @@ def main() -> None:
         optimizer=optimizer, scheduler=scheduler, n_train_steps=n_train_steps,
         rollout_batch_size=rollout_batch_size, group_size=group_size,
         gradient_accumulation_steps=grad_acc_steps, clip_range=clip_range,
-        use_std_normalization=use_std_norm, advantage_eps=adv_eps, device=device,
-        eval_every=eval_every, writer=writer, seed=seed, loss_type=loss_type,
-        max_completion_length=max_tokens,
+        device=device, eval_every=eval_every, writer=writer, seed=seed,
         objective=objective, lambda_psr=lambda_psr
     )
     
