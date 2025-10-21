@@ -1,4 +1,4 @@
-# zero_shot_eval.py
+# baseline.py - Zero-shot evaluation without fine-tuning
 import os, re, argparse
 from transformers import AutoTokenizer
 from vllm import LLM, SamplingParams
@@ -6,7 +6,7 @@ from datasets import load_dataset
 from dotenv import load_dotenv
 import torch
 from vllm.model_executor import set_random_seed as vllm_set_random_seed
-from starter import reward_fn
+from experiment import reward_fn  
 
 SEED = 42
 vllm_set_random_seed(SEED)
@@ -23,20 +23,36 @@ def is_correct(response: str, target: float, numbers: list) -> bool:
     return reward_fn(response, {"target": target, "numbers": numbers}) == 1.
 
 def main():
-    parser = argparse.ArgumentParser(description="Zero-shot evaluation of math reasoning")
+    parser = argparse.ArgumentParser(description="Zero-shot baseline evaluation (no fine-tuning)")
     parser.add_argument("-m", "--model", default="Qwen/Qwen3-1.7B", help="Model ID to evaluate")
-    parser.add_argument("--max_tokens", type=int, default=256, help="Maximum tokens for generation (default: 256)")
+    parser.add_argument("--max_tokens", type=int, default=256, help="Maximum tokens for generation")
+    parser.add_argument("--temperature", type=float, default=0.7, help="Sampling temperature (default: 0.7 to match training)")  # ← FIXED
+    parser.add_argument("--gpu_mem_util", type=float, default=0.4, help="GPU memory utilization")  # ← FIXED
     args = parser.parse_args()
     
     MODEL_ID = args.model
     MAX_TOKENS = args.max_tokens
     
-    print(f"Evaluating {MODEL_ID} with max_tokens={MAX_TOKENS}...")
+    print(f"Evaluating {MODEL_ID} (zero-shot baseline)")
+    print(f"Max tokens: {MAX_TOKENS}, Temperature: {args.temperature}")
     
     # Load model
-    llm = LLM(model=MODEL_ID, dtype=torch.bfloat16, max_model_len=2048, enable_prefix_caching=True, gpu_memory_utilization=0.9)
+    llm = LLM(
+        model=MODEL_ID, 
+        dtype=torch.bfloat16, 
+        max_model_len=2048, 
+        enable_prefix_caching=True, 
+        gpu_memory_utilization=args.gpu_mem_util  # ← FIXED: now configurable
+    )
     tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
-    sampling_params = SamplingParams(temperature=1.0, top_p=1.0, logprobs=0, max_tokens=MAX_TOKENS, stop=["</answer>"], include_stop_str_in_output=True)
+    sampling_params = SamplingParams(
+        temperature=args.temperature,  # ← FIXED: now uses arg
+        top_p=1.0, 
+        logprobs=0, 
+        max_tokens=MAX_TOKENS, 
+        stop=["</answer>"], 
+        include_stop_str_in_output=True
+    )
     
     # Load test split from properly split dataset
     eval_raw = load_dataset("justinphan3110/Countdown-Tasks-3to4", split="test")
@@ -67,7 +83,8 @@ def main():
             correct += 1
     
     accuracy = (correct / len(responses)) * 100
-    print(f"\nFinal Accuracy: {accuracy:.2f}% ({correct}/{len(responses)})")
+    print(f"\nBaseline Accuracy: {accuracy:.2f}% ({correct}/{len(responses)})")
+    print(f"Config: max_tokens={MAX_TOKENS}, temperature={args.temperature}")
 
 if __name__ == "__main__":
     main()
