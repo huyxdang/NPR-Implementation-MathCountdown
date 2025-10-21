@@ -506,8 +506,12 @@ def train(
     micro_train_batch_size = rollout_batch_size // gradient_accumulation_steps
     random.seed(seed)
     train_step = 0
+    
+    # Track evaluation history for summary at the end
+    eval_history = []
 
     metrics = evaluate_model(llm, sampling_params, eval_prompts, eval_answers)
+    eval_history.append((train_step, metrics['accuracy']))
     if writer:
         for k in ["accuracy", "mean_reward", "std_reward", "avg_output_tokens", "count_correct", "count_incorrect"]:
             writer.add_scalar(f"eval/{k}", metrics[k], global_step=train_step)
@@ -599,7 +603,16 @@ def train(
         log_train(rollout_loss, grad_norm, reward_meta, avg_output_tokens, writer, train_step)
         if train_step % eval_every == 0:
             metrics = evaluate_model(llm, sampling_params, eval_prompts, eval_answers)
+            eval_history.append((train_step, metrics['accuracy']))
             log_eval(metrics, writer, train_step)
+    
+    # Print evaluation summary
+    print(f"\n{'='*70}")
+    print("Evaluation Summary")
+    print(f"{'='*70}")
+    for step, accuracy in eval_history:
+        print(f"  Step {step:3d}: Accuracy = {accuracy:5.1f}%")
+    print(f"{'='*70}\n")
 
 
 def init_policy(model_id: str, device: str) -> Tuple[PreTrainedModel, AutoTokenizer]:
