@@ -51,7 +51,7 @@ Performance on the Countdown test set (accuracy %):
 | **W-REINFORCE (λ=0.3)** | 256 | _TBD_ | Weighted combination |
 | **W-REINFORCE (λ=0.3)** | 512 | _TBD_ | Weighted combination |
 
-All experiments use 200 training steps on Qwen3-1.7B with identical hyperparameters (see below).
+All experiments use 50 training steps on Qwen3-1.7B with identical hyperparameters (see below).
 
 ## Installation
 
@@ -171,16 +171,6 @@ Complete hyperparameter configuration (all experiments use identical settings ex
 - Learning rate schedule: Constant (no warmup)
 - Prompt template: Countdown task with `<think>` and `<answer>` tags
 
-## Repository Structure
-
-```
-.
-├── experiment.py           # Main training script
-├── baseline.py             # Zero-shot evaluation script
-├── run_experiments.sh      # Launcher for all 6 experiments
-├── requirements.txt        # Python dependencies
-└── README.md              # This file
-```
 
 ## Implementation Details
 
@@ -218,37 +208,6 @@ Objective-specific filtering in `make_weighted_rewards()`:
 - **PSR**: Keep only rewards > 0, set to +1
 - **NSR**: Keep only rewards < 0, set to -1
 - **W-REINFORCE**: Keep all samples, rewards ∈ {-1, +λ}
-
-## Citation
-
-If you use this code or findings, please cite:
-
-```bibtex
-@article{nsr2024,
-  title={The Surprising Effectiveness of Negative Reinforcement in LLM Reasoning},
-  journal={arXiv preprint arXiv:2506.01347},
-  year={2024},
-  url={https://arxiv.org/pdf/2506.01347}
-}
-```
-
-## Troubleshooting
-
-### Out of Memory (OOM)
-
-Reduce batch size or GPU memory utilization:
-
-```bash
-python experiment.py \
-    --objective NSR \
-    --max_tokens 256 \
-    --rollout_batch_size 64 \
-    --gpu_mem_util 0.3
-```
-
-## License
-
-MIT License. See original paper for academic usage guidelines.
 
 ## Acknowledgments
 
