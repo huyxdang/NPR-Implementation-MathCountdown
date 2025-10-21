@@ -161,7 +161,6 @@ def _evaluate_equation(equation_str: str) -> float | None:
     Returns:
         The result of the equation as a float, or None if it's invalid or unsafe.
     """
-    ### YOUR CODE HERE ###
     try: 
         # Allows only valid characters
         if not re.fullmatch(r"[0-9+\-*/()\s]+", equation_str): 
@@ -175,7 +174,6 @@ def _evaluate_equation(equation_str: str) -> float | None:
         
     except Exception:
         return None
-    ### END YOUR CODE ###
 
 
 
@@ -336,10 +334,6 @@ def make_weighted_rewards(rollout_responses, repeated_ground_truths, base_reward
     return rewards, keep_mask
 
 
-
-# ==============================================================================
-# Per-token PPO Loss Computation
-# ==============================================================================
 def compute_loss(
     advantages: torch.Tensor,
     policy_log_probs: torch.Tensor,
@@ -360,7 +354,6 @@ def compute_loss(
     4. The final loss is `-torch.minimum(unclipped_term, clipped_term)`.
     """
     loss = 0.0
-    ### YOUR CODE HERE ###
 
     # 1. Ratio between new and old policies
     pi_ratio = torch.exp(policy_log_probs - old_log_probs)
@@ -382,8 +375,6 @@ def compute_loss(
         "ratio_min": pi_ratio.min(),
         "ratio_max": pi_ratio.max(),
     }
-    
-    ### END YOUR CODE ###
     return loss, stats
 
 
@@ -393,7 +384,6 @@ def masked_mean(tensor: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
     
     This is the standard loss aggregation method that normalizes by actual response length.
     """
-    ### YOUR CODE HERE ###
     # Convert mask to float for proper multiplication
     mask = mask.float()
     
@@ -406,7 +396,6 @@ def masked_mean(tensor: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
     # Mean over valid tokens in each sequence, then average across batch
     mean_per_seq = masked_sum / token_count
     loss = mean_per_seq.mean()
-    ### END YOUR CODE ###
     return loss
 
 def get_response_log_probs(model: PreTrainedModel, input_ids: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
@@ -443,9 +432,9 @@ def rl_microbatch_step(
     advantages_per_seq: torch.Tensor, gradient_accumulation_steps: int, clip_range: float,
 ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
     """
-    Performs a single microbatch optimization step for NSR/PSR/W-REINFORCE training.
+    Microbatch step for NSR/PSR/W-REINFORCE training.
     
-    Uses standard masked mean loss (normalizes by actual response length per sequence).
+    Note: This uses raw rewards as advantages (no group normalization).
     
     Args:
         policy: The language model being trained
