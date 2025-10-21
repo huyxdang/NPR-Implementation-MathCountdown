@@ -327,6 +327,7 @@ def compute_group_normalized_advantages(
     advantage_eps: float,
     normalize_by_std: bool,
     precomputed_rewards: torch.Tensor | None = None,
+    objective: RLObjective = RLObjective.RLVR, 
 ) -> Tuple[torch.Tensor, torch.Tensor, Dict[str, torch.Tensor]]:
     # 1) compute or use provided rewards
     if precomputed_rewards is None:
@@ -335,16 +336,21 @@ def compute_group_normalized_advantages(
     else:
         raw_rewards = precomputed_rewards.float()
 
-    # 2) reshape into groups (assumes length multiple of group_size)
-    rewards_grouped = raw_rewards.view(-1, group_size)
-    group_mean = rewards_grouped.mean(dim=1, keepdim=True)
-    group_std = rewards_grouped.std(dim=1, keepdim=True, unbiased=False)
+    # 2) For NSR/PSR/W-REINFORCE: use raw rewards as advantages (no normalization)
+    # Paper uses rewards directly as learning signal, not group-normalized advantages
+    if objective in [RLObjective.NSR, RLObjective.PSR, RLObjective.W_REINFORCE]:
+        advantages = raw_rewards
+    else:
+        # RLVR only: apply group normalization
+        rewards_grouped = raw_rewards.view(-1, group_size)
+        group_mean = rewards_grouped.mean(dim=1, keepdim=True)
+        group_std = rewards_grouped.std(dim=1, keepdim=True, unbiased=False)
 
-    advantages = rewards_grouped - group_mean
-    if normalize_by_std:
-        advantages = advantages / (group_std + advantage_eps)
+        advantages = rewards_grouped - group_mean
+        if normalize_by_std:
+            advantages = advantages / (group_std + advantage_eps)
+        advantages = advantages.flatten()
 
-    advantages = advantages.flatten()
     metadata = {
         "mean": torch.mean(raw_rewards),
         "std": torch.std(raw_rewards, unbiased=False),
@@ -617,7 +623,7 @@ def train(
         answers_dup = duplicate_data(answers_batch, group_size)
         avg_output_tokens = sum(rollout_tokens) / len(rollout_tokens) if rollout_tokens else 0.0
                 
-        # NSR/PSR filtering: Build weighted rewards + keep mask for objective
+        # Apply objective-specific reward weighting and sample filtering
         weighted_rewards, keep_mask = make_weighted_rewards(
             rollout_response, answers_dup, reward_fn, objective=objective, lambda_psr=lambda_psr
         )
