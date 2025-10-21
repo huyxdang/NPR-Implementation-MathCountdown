@@ -644,11 +644,11 @@ def parse_args():
                         help="Group size for advantage normalization")
     parser.add_argument("--grad_acc_steps", type=int, default=16,
                         help="Gradient accumulation steps")
-    parser.add_argument("--lr", type=float, default=3e-6,
+    parser.add_argument("--lr", type=float, default=5e-6,
                         help="Learning rate")
     parser.add_argument("--clip_range", type=float, default=0.2,
                         help="PPO clip range")
-    parser.add_argument("--temperature", type=float, default=0.7,
+    parser.add_argument("--temperature", type=float, default=1,
                         help="Sampling temperature")
     parser.add_argument("--eval_every", type=int, default=10,
                         help="Evaluate every N steps")

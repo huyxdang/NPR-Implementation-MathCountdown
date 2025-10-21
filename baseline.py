@@ -26,8 +26,8 @@ def main():
     parser = argparse.ArgumentParser(description="Zero-shot baseline evaluation (no fine-tuning)")
     parser.add_argument("-m", "--model", default="Qwen/Qwen3-1.7B", help="Model ID to evaluate")
     parser.add_argument("--max_tokens", type=int, default=256, help="Maximum tokens for generation")
-    parser.add_argument("--temperature", type=float, default=0.7, help="Sampling temperature (default: 0.7 to match training)")  # ← FIXED
-    parser.add_argument("--gpu_mem_util", type=float, default=0.4, help="GPU memory utilization")  # ← FIXED
+    parser.add_argument("--temperature", type=float, default=1, help="Sampling temperature")  
+    parser.add_argument("--gpu_mem_util", type=float, default=0.4, help="GPU memory utilization") 
     args = parser.parse_args()
     
     MODEL_ID = args.model
@@ -42,11 +42,11 @@ def main():
         dtype=torch.bfloat16, 
         max_model_len=2048, 
         enable_prefix_caching=True, 
-        gpu_memory_utilization=args.gpu_mem_util  # ← FIXED: now configurable
+        gpu_memory_utilization=args.gpu_mem_util  
     )
     tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
     sampling_params = SamplingParams(
-        temperature=args.temperature,  # ← FIXED: now uses arg
+        temperature=args.temperature, 
         top_p=1.0, 
         logprobs=0, 
         max_tokens=MAX_TOKENS, 
