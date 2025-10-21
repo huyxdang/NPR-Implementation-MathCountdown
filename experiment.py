@@ -636,7 +636,7 @@ def parse_args():
     # Training hyperparameters
     parser.add_argument("--seed", type=int, default=42,
                         help="Random seed for reproducibility")
-    parser.add_argument("--n_train_steps", type=int, default=110,
+    parser.add_argument("--n_train_steps", type=int, default=120,
                         help="Number of training steps")
     parser.add_argument("--rollout_batch_size", type=int, default=128,
                         help="Rollout batch size")
@@ -650,7 +650,7 @@ def parse_args():
                         help="PPO clip range")
     parser.add_argument("--temperature", type=float, default=1,
                         help="Sampling temperature")
-    parser.add_argument("--eval_every", type=int, default=10,
+    parser.add_argument("--eval_every", type=int, default=20,
                         help="Evaluate every N steps")
     parser.add_argument("--gpu_mem_util", type=float, default=0.4,
                         help="GPU memory utilization for vLLM")
