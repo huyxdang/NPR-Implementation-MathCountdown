@@ -169,7 +169,7 @@ def _extract_answer(solution_str: str) -> str | None:
 
 
 def _validate_numbers(equation_str: str, available_numbers: List[int]) -> bool:
-    """
+    r"""
     Check if the numbers used in the equation are exactly the ones available.
 
     Hint:
@@ -641,7 +641,7 @@ def train(
             rollout_input   = [t for t, k in zip(rollout_input,   keep_list) if k]
             rollout_response= [t for t, k in zip(rollout_response,keep_list) if k]
             answers_dup     = [t for t, k in zip(answers_dup,     keep_list) if k]
-            weighted_rewards = weighted_rewards[keep_mask]
+            # weighted_rewards already filtered by make_weighted_rewards()
             rollout_batch_size_effective = len(rollout_response)
         else:
             rollout_batch_size_effective = rollout_batch_size
