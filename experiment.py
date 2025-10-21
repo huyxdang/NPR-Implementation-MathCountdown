@@ -292,12 +292,21 @@ def compute_advantages(
     raw_rewards = precomputed_rewards.float()
     advantages = raw_rewards  # No normalization - use rewards directly
     
-    metadata = {
-        "mean": torch.mean(raw_rewards),
-        "std": torch.std(raw_rewards, unbiased=False),
-        "max": torch.max(raw_rewards),
-        "min": torch.min(raw_rewards),
-    }
+    # Handle empty tensor case (all samples filtered out)
+    if raw_rewards.numel() == 0:
+        metadata = {
+            "mean": torch.tensor(0.0),
+            "std": torch.tensor(0.0),
+            "max": torch.tensor(0.0),
+            "min": torch.tensor(0.0),
+        }
+    else:
+        metadata = {
+            "mean": torch.mean(raw_rewards),
+            "std": torch.std(raw_rewards, unbiased=False),
+            "max": torch.max(raw_rewards),
+            "min": torch.min(raw_rewards),
+        }
     return advantages, raw_rewards, metadata
 
 
@@ -550,6 +559,11 @@ def train(
             answers_dup     = [t for t, k in zip(answers_dup,     keep_list) if k]
             # weighted_rewards already filtered by make_weighted_rewards()
             rollout_batch_size_effective = len(rollout_response)
+            
+            # Skip if all samples were filtered out
+            if rollout_batch_size_effective == 0:
+                print(f"Step {train_step + 1} | Skipping: All samples filtered out (NSR/PSR had no applicable samples)")
+                continue
         else:
             rollout_batch_size_effective = rollout_batch_size
 
@@ -723,9 +737,13 @@ def main() -> None:
     print(f"Seed:            {seed}")
     print(f"{'='*70}\n")
     
-    # Initialization
-    policy, tokenizer = init_policy(model_id=model_id, device=device)
+    # Initialization (vLLM first to allocate contiguous KV cache memory before policy fragments it)
     llm = init_vllm(model_id=model_id, device=device, seed=seed, gpu_memory_utilization=gpu_mem_util)
+    
+    # Clear any cached memory before loading policy
+    torch.cuda.empty_cache()
+    
+    policy, tokenizer = init_policy(model_id=model_id, device=device)
     sampling_params = init_sampling_params(temperature=temperature, min_tokens=min_tokens, max_tokens=max_tokens)
     
     # Dataset
