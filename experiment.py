@@ -679,7 +679,7 @@ def parse_args():
                         help="Sampling temperature")
     parser.add_argument("--eval_every", type=int, default=20,
                         help="Evaluate every N steps")
-    parser.add_argument("--gpu_mem_util", type=float, default=0.4,
+    parser.add_argument("--gpu_mem_util", type=float, default=0.7,
                         help="GPU memory utilization for vLLM")
     
     # Experiment tracking
