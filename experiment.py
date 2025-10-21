@@ -7,28 +7,28 @@
 #
 # KEY COMPONENTS:
 #
-# 1. BINARY REWARD FUNCTION (line ~226)
+# 1. BINARY REWARD FUNCTION (line ~222)
 #    - Returns {-1, +1} based on correctness
 #    - +1 if correct (has <answer>, valid numbers, equals target)
 #    - -1 otherwise (strict pass/fail evaluation)
 #
-# 2. RLObjective ENUM (line ~357)
+# 2. RLObjective ENUM (line ~353)
 #    - RLVR: Standard baseline (all samples, ±1 rewards)
 #    - PSR: Positive Sample Reinforcement (only correct samples)
 #    - NSR: Negative Sample Reinforcement (only incorrect samples)
 #    - W_REINFORCE: Weighted-REINFORCE (correct=+λ, incorrect=-1)
 #
-# 3. make_weighted_rewards() (line ~363)
+# 3. make_weighted_rewards() (line ~359)
 #    - Applies objective-specific reward weighting
 #    - Filters samples for PSR/NSR objectives
 #    - Returns: weighted_rewards, keep_mask
 #
-# 4. compute_group_normalized_advantages() (line ~322)
+# 4. compute_group_normalized_advantages() (line ~318)
 #    - Group-based advantage normalization for variance reduction
 #    - Accepts precomputed rewards for objective-specific weighting
 #    - Supports both std normalization (RLVR) and without (DR variants)
 #
-# 5. train() function (line ~538)
+# 5. train() function (line ~554)
 #    - Main training loop with rollout generation and policy updates
 #    - Sample filtering logic for PSR/NSR objectives
 #    - Ensures batch size is multiple of group_size
@@ -36,11 +36,15 @@
 #
 #
 # USAGE:
-#   In main(), set the objective (line ~659):
-#   - objective = RLObjective.W_REINFORCE  (paper's best, λ=0.1)
-#   - objective = RLObjective.NSR          (only train on mistakes)
-#   - objective = RLObjective.PSR          (only train on correct)
-#   - objective = RLObjective.RLVR         (standard baseline)
+#   Run experiments via command-line arguments:
+#
+#   python experiment.py --objective NSR --max_tokens 256
+#   python experiment.py --objective PSR --max_tokens 512
+#   python experiment.py --objective W_REINFORCE --max_tokens 256 --lambda_psr 0.3
+#   python experiment.py --objective RLVR --max_tokens 512
+#
+#   For all options: python experiment.py --help
+#   Or use: bash run_experiments.sh  (runs all 9 planned experiments)
 
 import os
 import datetime
