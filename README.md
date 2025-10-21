@@ -2,7 +2,6 @@
 
 [![Paper](https://img.shields.io/badge/arXiv-2506.01347-b31b1b.svg)](https://arxiv.org/pdf/2506.01347)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 Implementation of **"The Surprising Effectiveness of Negative Reinforcement in LLM Reasoning"** applied to the Math Countdown task. This work explores training language models with different sample selection strategies: learning from mistakes (NSR), learning from successes (PSR), and weighted combinations (W-REINFORCE).
 
@@ -48,8 +47,8 @@ Performance on the Countdown test set (accuracy %):
 | **NSR** | 512 | _TBD_ | Train on incorrect only |
 | **PSR** | 256 | _TBD_ | Train on correct only |
 | **PSR** | 512 | _TBD_ | Train on correct only |
-| **W-REINFORCE (λ=0.3)** | 256 | _TBD_ | Weighted combination |
-| **W-REINFORCE (λ=0.3)** | 512 | _TBD_ | Weighted combination |
+| **W-REINFORCE (λ=0.1)** | 256 | _TBD_ | Weighted combination |
+| **W-REINFORCE (λ=0.1)** | 512 | _TBD_ | Weighted combination |
 
 All experiments use 50 training steps on Qwen3-1.7B with identical hyperparameters (see below).
 
