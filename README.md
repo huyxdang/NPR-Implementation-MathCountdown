@@ -33,7 +33,7 @@ This implementation compares four reinforcement learning objectives for training
 | **NSR** | Incorrect only | -1 | Negative Sample Reinforcement (key contribution) |
 | **W-REINFORCE** | All samples | +λ (correct), -1 (incorrect) | Weighted combination (paper's best) |
 
-**Key Finding:** Training on mistakes (NSR) and weighted objectives (W-REINFORCE with λ=0.1-0.3) can outperform training only on correct samples, challenging conventional imitation learning approaches.
+**Key Finding:** Training on mistakes (NSR) and weighted objectives (W-REINFORCE with λ=0.1-0.3) can outperform training only on correct samples or all samples.
 
 ## Results
 
