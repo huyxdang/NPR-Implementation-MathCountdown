@@ -1,16 +1,16 @@
-# NSR (Negative Sample Reinforcement) on MATH Dataset
+# Small-scale RLVR Decomposed on MATH Dataset
 
-## Overview
+## 📋 Overview
 
 This repository implements and investigates the effectiveness of Negative Sample Reinforcement (NSR), Weighted REINFORCE (W-REINFORCE), and Positive Sample Reinforcement (PSR) objectives on mathematical reasoning tasks using the MATH dataset. The work is an extension of the paper "The Surprising Effectiveness of Negative Reinforcement in LLM Reasoning" (Zhu et al., 2025) and explores how these reinforcement learning objectives perform across different model sizes and capabilitie (priors).
 
-## Research Question
+## ❓ Research Question
 
 **How do NSR and W-REINFORCE objectives change with the model's prior knowledge and capabilities?**
 
 We investigate whether smaller models with less prior mathematical knowledge benefit differently from negative reinforcement compared to larger, more capable models. This study examines the relationship between model size, mathematical reasoning ability, and the effectiveness of different RL objectives.
 
-## Models Used
+## 🤖 Models Used
 
 We conduct experiments across the Qwen2.5 instruction-tuned model family:
 
@@ -20,7 +20,7 @@ We conduct experiments across the Qwen2.5 instruction-tuned model family:
 
 These models provide a good range of capabilities while maintaining the same architecture and training methodology, allowing for controlled comparison of how model priors may affect RL objective effectiveness.
 
-## Experimental Configuration
+## ⚙️ Experimental Configuration
 
 ### Training Parameters
 - **Max Tokens**: 512
@@ -46,7 +46,7 @@ We couldn't replicate the paper's parameters due to a lack of compute.
 2. **PSR (Positive Sample Reinforcement)**: Trains only on correct samples with +1.0 reward  
 3. **W-REINFORCE**: Weighted approach with +λ for correct, -1.0 for incorrect samples
 
-## Results
+## 📊 Results
 
 ### Training Curves
 
@@ -91,7 +91,7 @@ The following tables show the detailed accuracy measurements at each training st
 ### Analysis
 
 
-## Usage
+## 🚀 Usage
 
 ### Running Experiments
 
@@ -106,7 +106,7 @@ python MATH_experiment.py --objective W_REINFORCE --model_id Qwen/Qwen2.5-3B-Ins
 python MATH_experiment.py --objective PSR --model_id Qwen/Qwen2.5-1.5B-Instruct
 ```
 
-## Dependencies
+## 📦 Dependencies
 
 - PyTorch >= 2.0.0
 - Transformers >= 4.35.0
@@ -116,7 +116,7 @@ python MATH_experiment.py --objective PSR --model_id Qwen/Qwen2.5-1.5B-Instruct
 - TensorBoard >= 2.14.0
 
 
-## Acknowledgments
+## 🙏 Acknowledgments
 
 - Inspired by "The Surprising Effectiveness of Negative Reinforcement in LLM Reasoning"
 - Built on the MATH dataset by Hendrycks et al.
