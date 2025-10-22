@@ -9,7 +9,6 @@ def extract_boxed_answer(solution: str, context: str = "solution") -> str:
     if match:
         return match.group(1)
     else:
-        print(f"Warning: No \\boxed{{}} found in {context}")
         return ""
 
 def verify_answer(predicted: str, ground_truth: str) -> bool:
