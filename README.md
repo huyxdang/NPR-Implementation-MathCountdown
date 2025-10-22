@@ -90,12 +90,13 @@ The following tables show the detailed accuracy measurements at each training st
 
 ### Main Findings
 
-Overall, we find that under a resource-constrained setting, the three reinforcement learning methods—NSR, W-REINFORCE, and PSR—either **fail to produce significant improvements or only marginally enhance the base model’s performance.**
-* For the 0.5B and 1.5B models, all three methods either approximately maintained the baseline or led to only small accuracy gains over 80 training steps.
-* For the 3B model, performance actually degraded.
+Overall, we find that under a resource-constrained setting, the three reinforcement learning methods—NSR, W-REINFORCE, and PSR—either fail to yield meaningful gains or only marginally improve upon the base model.
 
-We attribute these results primarily to the **limited number of training samples**. Our rollout batch size was already small, and both NSR and PSR further reduced the effective sample count by filtering out trajectories.. W-REINFORCE faces a similar limitation: although it does not discard samples, it down-weights the positive examples (by 0.1×), effectively emphasizing a small subset of negative samples. This lack of effective weakens the learning signals and leads to negligible improvements / degradations.
+For the 0.5B and 1.5B models, all three methods largely maintained baseline performance, achieving only minor accuracy increases over 80 training steps.
 
+For the 3B model, performance degraded.
+
+We attribute these outcomes primarily to the limited number of effective training samples. The rollout batch size was already small, and both NSR and PSR further reduced usable data by filtering trajectories. W-REINFORCE suffers from a similar issue: although it retains all samples, it heavily down-weights positive examples (by 0.1×), concentrating updates on a small subset of negative samples. This reduction in effective signal weakens gradient updates and results in minimal or negative performance changes.
 
 ## 🚀 Usage
 
