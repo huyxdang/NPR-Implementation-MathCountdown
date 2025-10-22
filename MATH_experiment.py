@@ -579,7 +579,7 @@ def parse_args():
     parser.add_argument("--objective", type=str, default="NSR", 
                         choices=["PSR", "NSR", "W_REINFORCE"],
                         help="RL objective to use")
-    parser.add_argument("--max_tokens", type=int, default=256,
+    parser.add_argument("--max_tokens", type=int, default=512,
                         help="Maximum tokens for generation")
     parser.add_argument("--lambda_psr", type=float, default=0.1,
                         help="Weight for correct samples in W-REINFORCE objective")
@@ -593,13 +593,13 @@ def parse_args():
     # Training hyperparameters
     parser.add_argument("--seed", type=int, default=42,
                         help="Random seed for reproducibility")
-    parser.add_argument("--n_train_steps", type=int, default=120,
+    parser.add_argument("--n_train_steps", type=int, default=80,
                         help="Number of training steps")
-    parser.add_argument("--rollout_batch_size", type=int, default=256,
+    parser.add_argument("--rollout_batch_size", type=int, default=64,
                         help="Total rollout samples (num_prompts × rollouts_per_prompt)")
-    parser.add_argument("--rollouts_per_prompt", type=int, default=4,
+    parser.add_argument("--rollouts_per_prompt", type=int, default=2,
                         help="Number of rollouts to generate per prompt (paper uses 8)")
-    parser.add_argument("--grad_acc_steps", type=int, default=8,
+    parser.add_argument("--grad_acc_steps", type=int, default=2,
                         help="Gradient accumulation steps")
     parser.add_argument("--lr", type=float, default=1e-6,
                         help="Learning rate")
@@ -607,9 +607,9 @@ def parse_args():
                         help="PPO clip range")
     parser.add_argument("--temperature", type=float, default=1,
                         help="Sampling temperature")
-    parser.add_argument("--eval_every", type=int, default=20,
+    parser.add_argument("--eval_every", type=int, default=10,
                         help="Evaluate every N steps")
-    parser.add_argument("--gpu_mem_util", type=float, default=0.7,
+    parser.add_argument("--gpu_mem_util", type=float, default=0.3,
                         help="GPU memory utilization for vLLM")
     
     # Experiment tracking
