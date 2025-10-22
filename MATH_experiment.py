@@ -36,6 +36,8 @@ def get_constant_schedule_with_warmup(optimizer: torch.optim.Optimizer, num_warm
 # Prompt Template
 MATH_TEMPLATE = """Solve the following math problem step-by-step. Write your solution in LaTeX format and put your final answer in \\boxed{{}}.
 
+IMPORTANT: You MUST end your response with \\boxed{{your_final_answer}} where your_final_answer is the numerical or symbolic answer.
+
 Problem: {problem}
 Solution:"""
 

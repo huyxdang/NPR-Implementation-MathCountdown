@@ -5,6 +5,7 @@ import json
 from collections import defaultdict
 from datasets import load_dataset
 
+
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils import extract_boxed_answer
@@ -12,7 +13,7 @@ from utils import extract_boxed_answer
 # --- CONFIG ---
 DATASET_NAME = "huyxdang/MATH-dataset"
 OUTPUT_DIR = "./data/math_json"
-SUBSET_RATIO = 0.10
+SUBSET_RATIO = 0.25
 LABEL_COL = "type"
 SEED = 42
 
