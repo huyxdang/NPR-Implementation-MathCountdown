@@ -49,7 +49,7 @@ else:
 
 # --- Add answer column ---
 def add_answer(example):
-    example["answer"] = extract_boxed_answer(example["solution"])
+    example["answer"] = extract_boxed_answer(example["solution"], "ground truth solution")
     return example
 
 train_dataset = train_dataset.map(add_answer)

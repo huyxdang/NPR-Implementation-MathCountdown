@@ -1,7 +1,7 @@
 import re
 from math_verify import parse, verify, LatexExtractionConfig
 
-def extract_boxed_answer(solution: str) -> str:
+def extract_boxed_answer(solution: str, context: str = "solution") -> str:
     """Extract the content inside \\boxed{} from the solution."""
     pattern = r'\\boxed\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}'
     match = re.search(pattern, solution)
@@ -9,7 +9,7 @@ def extract_boxed_answer(solution: str) -> str:
     if match:
         return match.group(1)
     else:
-        print(f"Warning: No \\boxed{{}} found in solution")
+        print(f"Warning: No \\boxed{{}} found in {context}")
         return ""
 
 def verify_answer(predicted: str, ground_truth: str) -> bool:

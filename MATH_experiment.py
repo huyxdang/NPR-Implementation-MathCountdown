@@ -114,7 +114,7 @@ def reward_fn(generated_text: str, ground_truth: Dict, scale_factor: float = 1.0
         return -1.0
 
     # Extract answer from generated text
-    predicted_answer = extract_boxed_answer(generated_text)
+    predicted_answer = extract_boxed_answer(generated_text, "model prediction")
     if not predicted_answer:
         return -1.0
 
@@ -131,7 +131,7 @@ def evaluate_model(llm: LLM, sampling_params: SamplingParams, eval_prompts: List
     for rollout, gt in zip(rollouts, eval_answers):
         response_text = rollout.outputs[0].text
         reward_value = reward_fn(response_text, gt)
-        predicted_answer = extract_boxed_answer(response_text)
+        predicted_answer = extract_boxed_answer(response_text, "model prediction")
         output_tokens = len(llm.llm_engine.tokenizer.encode(response_text))
         output_token_lengths.append(output_tokens)
         examples.append({
@@ -531,9 +531,7 @@ def train(
             )
             rollout_loss += float(loss.item())
 
-
-
-            
+    
         grad_norm = torch.nn.utils.clip_grad_norm_([p for p in policy.parameters() if p.grad is not None], 1.0)
         optimizer.step()
         scheduler.step()
