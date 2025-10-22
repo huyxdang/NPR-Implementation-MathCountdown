@@ -56,7 +56,7 @@ def init_vllm(model_id: str, device: str, seed: int, gpu_memory_utilization: flo
             dtype=torch.bfloat16,
             enable_prefix_caching=True,
             gpu_memory_utilization=gpu_memory_utilization,
-            max_model_len=4096
+            max_model_len=2048
         )
 
 
@@ -338,6 +338,7 @@ def masked_mean(tensor: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
     return loss
 
 def get_response_log_probs(model: PreTrainedModel, input_ids: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
+    torch.cuda.empty_cache()
     logits = model(input_ids).logits
     log_probs = F.log_softmax(logits, dim=-1)
     log_probs = torch.gather(log_probs, dim=-1, index=labels.unsqueeze(-1)).squeeze(-1)
@@ -561,6 +562,7 @@ def init_policy(model_id: str, device: str) -> Tuple[PreTrainedModel, AutoTokeni
     model = AutoModelForCausalLM.from_pretrained(
         model_id, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2", use_cache=False
     )
+    model.gradient_checkpointing_enable()
     tokenizer = AutoTokenizer.from_pretrained(model_id)
     model.to(device).train()
     return model, tokenizer
