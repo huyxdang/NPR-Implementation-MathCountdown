@@ -1,216 +1,124 @@
-# Negative Sample Reinforcement for Math Countdown
+# NSR (Negative Sample Reinforcement) on MATH Dataset
 
-[![Paper](https://img.shields.io/badge/arXiv-2506.01347-b31b1b.svg)](https://arxiv.org/pdf/2506.01347)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+## Overview
 
-Implementation of **"The Surprising Effectiveness of Negative Reinforcement in LLM Reasoning"** applied to the Math Countdown task. This work explores training language models with different sample selection strategies: learning from mistakes (NSR), learning from successes (PSR), and weighted combinations (W-REINFORCE).
+This repository implements and investigates the effectiveness of Negative Sample Reinforcement (NSR) and Weighted REINFORCE (W-REINFORCE) objectives on mathematical reasoning tasks using the MATH dataset. The work is inspired by the paper "The Surprising Effectiveness of Negative Reinforcement in LLM Reasoning" and explores how these reinforcement learning objectives perform across different model sizes and capabilities.
 
-## Math Countdown Task
+## Research Question
 
-The Countdown task requires generating valid arithmetic equations using a given set of numbers to reach a target value. Each number must be used exactly once.
+**How do NSR and W-REINFORCE objectives change with the model's prior knowledge and capabilities?**
 
-**Example:**
-```
-Input:  numbers = [1, 2, 3, 4], target = 5
-Output: (1 + 2) * 3 - 4 = 5 ✓
-```
+We investigate whether smaller models with less prior mathematical knowledge benefit differently from negative reinforcement compared to larger, more capable models. This study examines the relationship between model size, mathematical reasoning ability, and the effectiveness of different RL objectives.
 
-**Evaluation Criteria:**
-- Equation must contain a valid `<answer>...</answer>` tag
-- All and only the given numbers are used
-- Arithmetic evaluation equals the target value
+## Models Used
 
-**Dataset:** `justinphan3110/Countdown-Tasks-3to4` (3-4 digit problems)
+We conduct experiments across the Qwen2.5 instruction-tuned model family:
 
-## Paper Summary
+- **Qwen2.5-0.5B-Instruct** (0.49B parameters)
+- **Qwen2.5-1.5B-Instruct** (1.5B parameters) 
+- **Qwen2.5-3B-Instruct** (3B parameters)
 
-This implementation compares four reinforcement learning objectives for training language models on verifiable reasoning tasks:
+These models provide a good range of capabilities while maintaining the same architecture and training methodology, allowing for controlled comparison of how model size affects RL objective effectiveness.
 
-| Objective | Training Samples | Reward Weighting | Description |
-|-----------|-----------------|------------------|-------------|
-| **RLVR** | All samples | ±1 | Standard RL baseline |
-| **PSR** | Correct only | +1 | Positive Sample Reinforcement |
-| **NSR** | Incorrect only | -1 | Negative Sample Reinforcement (key contribution) |
-| **W-REINFORCE** | All samples | +λ (correct), -1 (incorrect) | Weighted combination (paper's best) |
+## Experimental Configuration
 
-**Key Finding:** Training on mistakes (NSR) and weighted objectives (W-REINFORCE with λ=0.1-0.3) can outperform training only on correct samples or all samples.
+### Training Parameters
+- **Max Tokens**: 8,192 (increased from default to allow for detailed mathematical reasoning)
+- **Training Steps**: 100
+- **Rollout Batch Size**: 2,048
+- **Mini-batch Size**: 256
+- **Temperature**: 1.0 (consistent across all experiments)
+- **Rollouts per Prompt**: 8
+- **Learning Rate**: 1e-6
+- **Gradient Accumulation Steps**: 8
+- **PPO Clip Range**: 0.2
+
+### Dataset
+- **Source**: MATH dataset (Hendrycks et al.)
+- **Processing**: Stratified sampling (25% subset) maintaining original train/test distributions
+- **Format**: Problems with step-by-step solutions and `\boxed{}` final answers
+- **Evaluation**: Answer verification using `math-verify` library
+
+### RL Objectives
+1. **NSR (Negative Sample Reinforcement)**: Trains only on incorrect samples with -1.0 reward
+2. **PSR (Positive Sample Reinforcement)**: Trains only on correct samples with +1.0 reward  
+3. **W-REINFORCE**: Weighted approach with +λ for correct, -1.0 for incorrect samples
 
 ## Results
 
-Performance on the Countdown test set (accuracy %):
+*Results section to be updated after experiment completion*
 
-| Method | Max Tokens | Accuracy (%) | Notes |
-|--------|-----------|--------------|-------|
-| **Baseline (Zero-shot)** | 256 | _TBD_ | No fine-tuning |
-| **Baseline (Zero-shot)** | 512 | _TBD_ | No fine-tuning |
-| **NSR** | 256 | _TBD_ | Train on incorrect only |
-| **NSR** | 512 | _TBD_ | Train on incorrect only |
-| **PSR** | 256 | _TBD_ | Train on correct only |
-| **PSR** | 512 | _TBD_ | Train on correct only |
-| **W-REINFORCE (λ=0.1)** | 256 | _TBD_ | Weighted combination |
-| **W-REINFORCE (λ=0.1)** | 512 | _TBD_ | Weighted combination |
+### Expected Analysis
+- **Model Size vs. Objective Effectiveness**: How does the optimal RL objective change with model capability?
+- **Learning Dynamics**: Do smaller models require different reward structures?
+- **Mathematical Reasoning Improvement**: Quantitative analysis of accuracy improvements across different problem types
+- **Convergence Patterns**: How quickly do different objectives converge for different model sizes?
 
-All experiments use 50 training steps on Qwen3-1.7B with identical hyperparameters (see below).
+## Usage
 
-## Installation
+### Running Experiments
 
 ```bash
-# Clone repository
-git clone <repository-url>
-cd NPR-Implementation-MathCountdown-1
+# NSR with 0.5B model
+python MATH_experiment.py --objective NSR --model_id Qwen/Qwen2.5-0.5B-Instruct
 
-# Install dependencies
-pip install -r requirements.txt
+# W-REINFORCE with 3B model  
+python MATH_experiment.py --objective W_REINFORCE --model_id Qwen/Qwen2.5-3B-Instruct --lambda_psr 0.1
 
-# Optional: Install Flash Attention for faster training
-pip install flash-attn --no-build-isolation
+# PSR with 1.5B model
+python MATH_experiment.py --objective PSR --model_id Qwen/Qwen2.5-1.5B-Instruct
 ```
 
-**Requirements:**
-- Python 3.10+
-- PyTorch 2.0+
-- CUDA-capable GPU (recommended: 24GB+ VRAM)
-- vLLM 0.4.0+
-
-## Quick Start
-
-### Run Baseline Evaluation (Zero-shot)
+### Data Preprocessing
 
 ```bash
-# Evaluate pre-trained model without fine-tuning
-python baseline.py --max_tokens 256
-python baseline.py --max_tokens 512
-python baseline.py --max_tokens 1024
+# Process MATH dataset with stratified sampling
+python data/pre_process.py
 ```
 
-### Run All Experiments
+### Testing Utilities
 
 ```bash
-# Run all 9 fine-tuning experiments sequentially
-bash run_experiments.sh
+# Test answer extraction and verification
+python test_utils.py
 ```
 
-### Full Experiment Suite
+## Dependencies
 
-```bash
-# Experiment 1: NSR with 256 tokens
-python experiment.py --objective NSR --max_tokens 256
+- PyTorch >= 2.0.0
+- Transformers >= 4.35.0
+- vLLM >= 0.2.0
+- math-verify >= 0.1.0
+- Datasets >= 2.14.0
+- TensorBoard >= 2.14.0
 
-# Experiment 2: NSR with 512 tokens
-python experiment.py --objective NSR --max_tokens 512
-
-# Experiment 3: NSR with 1024 tokens
-python experiment.py --objective NSR --max_tokens 1024
-
-# Experiment 4: PSR with 256 tokens
-python experiment.py --objective PSR --max_tokens 256
-
-# Experiment 5: PSR with 512 tokens
-python experiment.py --objective PSR --max_tokens 512
-
-# Experiment 6: NSR with 1024 tokens
-python experiment.py --objective PSR --max_tokens 1024
-
-# Experiment 7: W-REINFORCE (λ=0.1) with 256 tokens
-python experiment.py --objective W_REINFORCE --max_tokens 256 
-
-# Experiment 8: W-REINFORCE (λ=0.1) with 512 tokens
-python experiment.py --objective W_REINFORCE --max_tokens 512 
-
-# Experiment 9: W-REINFORCE (λ=0.1) with 1024 tokens
-python experiment.py --objective W_REINFORCE --max_tokens 1024 
-```
-
-## Hyperparameters
-
-Complete hyperparameter configuration (all experiments use identical settings except objective and max_tokens):
-
-### Core Training Parameters
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `--model_id` | `Qwen/Qwen3-1.7B` | Pre-trained model |
-| `--n_train_steps` | `200` | Number of training iterations |
-| `--lr` | `3e-6` | Learning rate (AdamW) |
-| `--seed` | `42` | Random seed for reproducibility |
-| `--device` | `cuda` | Training device |
-
-### Rollout & Batch Configuration
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `--rollout_batch_size` | `128` | Total samples per training step |
-| `--group_size` | `8` | Samples per prompt (for advantage normalization) |
-| `--grad_acc_steps` | `16` | Gradient accumulation steps |
-| `--temperature` | `0.7` | Sampling temperature |
-| `--max_tokens` | `256` | Max response length (variable: 256 or 512) |
-
-### RL Objective Parameters
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `--objective` | `NSR` | RL objective: `RLVR`, `PSR`, `NSR`, or `W_REINFORCE` |
-| `--lambda_psr` | `0.1` | Weight for correct samples (W-REINFORCE only) |
-| `--clip_range` | `0.2` | PPO clipping parameter |
-
-### System Configuration
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `--gpu_mem_util` | `0.4` | vLLM GPU memory utilization (0-1) |
-| `--eval_every` | `10` | Evaluation frequency (steps) |
-| `--loss_type` | `standard` | Loss computation: `standard` or `length_normalized` |
-| `--output_dir` | `./output` | Directory for checkpoints and logs |
-
-### Fixed Parameters (Not Configurable via CLI)
-
-- Optimizer: AdamW (weight_decay=1e-2, betas=(0.9, 0.95))
-- Advantage epsilon: 1e-4
-- Minimum tokens: 4
-- Learning rate schedule: Constant (no warmup)
-- Prompt template: Countdown task with `<think>` and `<answer>` tags
-
-
-## Implementation Details
-
-### Reward Function
-
-Binary verifiable rewards based on correctness:
-
-```python
-def reward_fn(response, ground_truth):
-    equation = extract_answer(response)
-    if not equation:
-        return -1.0
-    if not validate_numbers(equation, ground_truth["numbers"]):
-        return -1.0
-    if not evaluate_equation(equation) == ground_truth["target"]:
-        return -1.0
-    return +1.0
-```
-
-### Group-Normalized Advantages
-
-Advantages computed using group normalization (GRPO):
+## File Structure
 
 ```
-advantages = (rewards - group_mean) / (group_std + ε)
+├── MATH_experiment.py          # Main experiment script
+├── utils.py                    # Answer extraction and verification utilities
+├── data/
+│   ├── pre_process.py         # Dataset preprocessing with stratified sampling
+│   └── math_json/             # Processed MATH dataset (JSONL format)
+├── test_utils.py              # Unit tests for utilities
+└── requirements.txt           # Python dependencies
 ```
 
-where groups contain `group_size=8` rollouts per prompt.
+## Citation
 
-### Sample Filtering
+If you use this code in your research, please cite:
 
-Objective-specific filtering in `make_weighted_rewards()`:
-
-- **RLVR**: Keep all samples, rewards ∈ {-1, +1}
-- **PSR**: Keep only rewards > 0, set to +1
-- **NSR**: Keep only rewards < 0, set to -1
-- **W-REINFORCE**: Keep all samples, rewards ∈ {-1, +λ}
+```bibtex
+@misc{nsr-math-experiments,
+  title={NSR and W-REINFORCE on MATH Dataset: Investigating Model Size Effects},
+  author={Your Name},
+  year={2024},
+  url={https://github.com/yourusername/NPR-Implementation-MathCountdown-1}
+}
+```
 
 ## Acknowledgments
 
-- Paper authors for the NSR/PSR/W-REINFORCE framework
-- HuggingFace for Transformers and Datasets libraries
-- vLLM team for efficient LLM inference
-- Dataset: `justinphan3110/Countdown-Tasks-3to4`
+- Inspired by "The Surprising Effectiveness of Negative Reinforcement in LLM Reasoning"
+- Built on the MATH dataset by Hendrycks et al.
+- Uses Qwen2.5 models by Alibaba Cloud
