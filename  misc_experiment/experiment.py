@@ -1,7 +1,3 @@
-# RLVR (Reinforcement Learning with Verifiable Rewards) Implementation
-# Based on: "The Surprising Effectiveness of Negative Reinforcement in LLM Reasoning"
-# Paper: https://arxiv.org/pdf/2506.01347
-
 import os
 import datetime
 import random

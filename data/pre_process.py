@@ -1,9 +1,13 @@
 import os
+import sys
 import random
 import json
 from collections import defaultdict
 from datasets import load_dataset
-from math_verify import extract_answer  # Use math-verify instead
+
+# Add parent directory to path for imports
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from utils import extract_boxed_answer
 
 # --- CONFIG ---
 DATASET_NAME = "huyxdang/MATH-dataset"
@@ -42,36 +46,14 @@ if SUBSET_RATIO < 1.0:
 else:
     print("⚠️ Using full dataset (no sampling).")
 
-# --- Transform ---
-def make_map_fn(split, data_source):
-    def process_fn(example, idx):
-        question = example["problem"]
-        solution = example["solution"]
-        answer = extract_answer(solution)  # Use math-verify's extract_answer
-        
-        ground_truth = {
-            "question": question,
-            "solution": solution,
-            "target": answer,
-        }
-        
-        return {
-            "data_source": data_source,
-            "prompt": [{"role": "user", "content": question}],
-            "ability": "math",
-            "reward_model": {
-                "style": "rule",
-                "ground_truth": ground_truth
-            },
-            "extra_info": {
-                "split": split,
-                "index": idx
-            }
-        }
-    return process_fn
 
-train_dataset = train_dataset.map(make_map_fn("train", DATASET_NAME), with_indices=True)
-test_dataset = test_dataset.map(make_map_fn("test", DATASET_NAME), with_indices=True)
+# --- Add answer column ---
+def add_answer(example):
+    example["answer"] = extract_boxed_answer(example["solution"])
+    return example
+
+train_dataset = train_dataset.map(add_answer)
+test_dataset = test_dataset.map(add_answer)
 
 # --- Save JSONL ---
 def save_jsonl(dataset, path):
