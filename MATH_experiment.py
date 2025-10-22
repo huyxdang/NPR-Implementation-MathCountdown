@@ -72,7 +72,7 @@ def init_sampling_params(temperature: float, min_tokens: int, max_tokens: int) -
         max_tokens=max_tokens,
         logprobs=0,
     )
-    sp.stop = ["</answer>"]
+    # Remove stop token for MATH dataset - let model generate naturally
     sp.include_stop_str_in_output = True
     return sp
 
@@ -683,10 +683,16 @@ def main() -> None:
     # Dataset - Load MATH dataset from local JSONL files
     def load_math_jsonl(filepath):
         """Load data from JSONL file."""
+        if not os.path.exists(filepath):
+            raise FileNotFoundError(f"Dataset file not found: {filepath}")
+        
         data = []
         with open(filepath, 'r', encoding='utf-8') as f:
-            for line in f:
-                data.append(json.loads(line.strip()))
+            for line_num, line in enumerate(f, 1):
+                try:
+                    data.append(json.loads(line.strip()))
+                except json.JSONDecodeError as e:
+                    print(f"Warning: Skipping invalid JSON on line {line_num}: {e}")
         return data
     
     def build_math_dataset(data):
