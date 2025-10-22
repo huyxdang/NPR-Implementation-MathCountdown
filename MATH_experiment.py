@@ -666,7 +666,6 @@ def main() -> None:
     print(f"Rollout Batch Size:  {rollout_batch_size} ({num_prompts} prompts × {rollouts_per_prompt} rollouts)")
     print(f"Grad Acc Steps:      {grad_acc_steps}")
     print(f"Learning Rate:       {lr}")
-    print(f"Clip Range:          {clip_range}")
     print(f"Temperature:         {temperature}")
     print(f"Seed:                {seed}")
     print(f"{'='*70}\n")
