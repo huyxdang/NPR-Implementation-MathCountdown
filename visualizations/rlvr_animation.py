@@ -36,7 +36,7 @@ class RLVRDecomposition(Scene):
     
         # NSR part
         nsr_part = MathTex(
-            r"-\mathbb{E}\left[\sum_{y:r(x,y)=-1}(-\pi_\theta(y|x))\right]",
+            r"-\mathbb{E}\left[\sum_{y:r(x,y)=-1}-\pi_\theta(y|x)\right]",
             font_size=44,
             color=RED
         )
