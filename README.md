@@ -50,15 +50,43 @@ We couldn't replicate the paper's parameters due to a lack of compute.
 
 ### Training Curves
 
-The following visualization shows the training progress across different model sizes and RL objectives:
+The following visualization shows the training progress across different model sizes and RL objectives. The original data points were noisy, so we smoothed the training curves using moving average with window = 2. 
 
-![Training Curves](visualizations/training_curves_smoothed.png) (Smoothed via MA with Window = 2)
+![Training Curves](visualizations/training_curves_smoothed.png) 
 
 ### Final Performance Comparison
 
 The bar chart below compares the final performance of different RL objectives across model sizes:
 
 ![Final Performance Comparison](visualizations/final_performance_comparison.png)
+
+### Raw Data Points
+
+The following tables show the detailed accuracy measurements at each training step for all RL objectives and model sizes:
+
+#### NSR Results
+
+| Model | Step 0 | Step 10 | Step 20 | Step 30 | Step 40 | Step 50 | Step 60 | Step 70 | Step 80 |
+|-------|--------|---------|---------|---------|---------|---------|---------|---------|---------|
+| 0.5B  | 9.1%   | 9.3%    | 10.4%   | 9.0%    | 8.9%    | 9.6%    | 9.3%    | 10.1%   | 10.3%   |
+| 1.5B  | 26.2%  | 26.6%   | 24.5%   | 24.5%   | 24.6%   | 24.6%   | 26.8%   | 25.7%   | 26.3%   |
+| 3B    | 38.4%  | 36.4%   | 38.2%   | 38.0%   | 36.7%   | 36.7%   | 37.7%   | 36.2%   | 35.1%   |
+
+#### W-REINFORCE Results
+
+| Model | Step 0 | Step 10 | Step 20 | Step 30 | Step 40 | Step 50 | Step 60 | Step 70 | Step 80 |
+|-------|--------|---------|---------|---------|---------|---------|---------|---------|---------|
+| 0.5B  | 9.1%   | 8.7%    | 9.5%    | 9.6%    | 10.7%   | 8.9%    | 9.1%    | 9.6%    | 10.0%   |
+| 1.5B  | 26.2%  | 25.0%   | 26.9%   | 25.8%   | 25.7%   | 25.3%   | 25.9%   | 26.4%   | 25.8%   |
+| 3B    | 38.4%  | 38.0%   | 38.4%   | 37.6%   | 38.6%   | 38.7%   | 37.4%   | 37.2%   | 37.5%   |
+
+#### PSR Results
+
+| Model | Step 0 | Step 10 | Step 20 | Step 30 | Step 40 | Step 50 | Step 60 | Step 70 | Step 80 |
+|-------|--------|---------|---------|---------|---------|---------|---------|---------|---------|
+| 0.5B  | 9.1%   | 9.5%    | 8.6%    | 9.7%    | 9.8%    | 10.1%   | 10.4%   | 9.5%    | 9.8%    |
+| 1.5B  | 23.7%  | 25.4%   | 24.9%   | 27.6%   | 24.6%   | 25.8%   | 26.2%   | 27.2%   | 27.6%   |
+| 3B    | 35.9%  | 38.0%   | 36.3%   | 36.6%   | 36.9%   | 37.6%   | 37.5%   | 36.0%   | 36.9%   |
 
 ### Analysis
 
