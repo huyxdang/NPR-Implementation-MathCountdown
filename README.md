@@ -118,6 +118,6 @@ python MATH_experiment.py --objective PSR --model_id Qwen/Qwen2.5-1.5B-Instruct
 
 ## 🙏 Acknowledgments
 
-- Inspired by "The Surprising Effectiveness of Negative Reinforcement in LLM Reasoning"
+- Inspired by "The Surprising Effectiveness of Negative Reinforcement in LLM Reasoning" by Zhu et al.
 - Built on the MATH dataset by Hendrycks et al.
 - Uses Qwen2.5 models by Alibaba Cloud
