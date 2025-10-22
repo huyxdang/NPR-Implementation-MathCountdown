@@ -10,7 +10,7 @@ This repository implements and investigates the effectiveness of Negative Sample
 
 We investigate whether smaller models with less prior mathematical knowledge benefit differently from negative reinforcement compared to larger, more capable models. This study examines the relationship between model size, mathematical reasoning ability, and the effectiveness of different RL objectives.
 
-## 🤖 Models Used
+## 🤖 Models
 
 We conduct experiments across the Qwen2.5 instruction-tuned model family:
 
@@ -46,7 +46,7 @@ We couldn't replicate the paper's parameters due to a lack of compute.
 2. **PSR (Positive Sample Reinforcement)**: Trains only on correct samples with +1.0 reward  
 3. **W-REINFORCE**: Weighted approach with +λ for correct, -1.0 for incorrect samples
 
-## 📊 Results
+## 📊 Results (Pass#1)
 
 ### Training Curves
 
@@ -88,7 +88,13 @@ The following tables show the detailed accuracy measurements at each training st
 | 1.5B  | 23.7%  | 25.4%   | 24.9%   | 27.6%   | 24.6%   | 25.8%   | 26.2%   | 27.2%   | 27.6%   |
 | 3B    | 35.9%  | 38.0%   | 36.3%   | 36.6%   | 36.9%   | 37.6%   | 37.5%   | 36.0%   | 36.9%   |
 
-### Analysis
+### Main Findings
+
+Overall, we find that under a resource-constrained setting, the three reinforcement learning methods—NSR, W-REINFORCE, and PSR—either fail to produce significant improvements or only marginally enhance the base model’s performance.
+* For the 0.5B and 1.5B models, all three methods either approximately maintained the baseline or led to only small accuracy gains over 80 training steps.
+* For the 3B model, performance actually degraded.
+
+We attribute these results primarily to the limited number of training samples. Our rollout batch size was already small, and both NSR and PSR further reduced the effective sample count by filtering out trajectories.. W-REINFORCE faces a similar limitation: although it does not discard samples, it down-weights the positive examples (by 0.1×), effectively emphasizing a small subset of negative samples. This lack of effective weakens the learning signals and leads to negligible improvements / degradations.
 
 
 ## 🚀 Usage
