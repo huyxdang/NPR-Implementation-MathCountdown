@@ -1,5 +1,11 @@
 # Small-scale RLVR Decomposed on MATH Dataset
 
+## 🎬 RLVR Decomposition Animation
+
+https://github.com/user-attachments/assets/RLVRDecomposition.mp4
+
+*This animation visualizes the decomposition of the RLVR objective into PSR (Positive Sample Reinforcement) and NSR (Negative Sample Reinforcement) components.*
+
 ## 📋 Overview
 
 This repository implements and investigates the effectiveness of Negative Sample Reinforcement (NSR), Weighted REINFORCE (W-REINFORCE), and Positive Sample Reinforcement (PSR) objectives on mathematical reasoning tasks using the MATH dataset. The work is an extension of the paper "The Surprising Effectiveness of Negative Reinforcement in LLM Reasoning" (Zhu et al., 2025) and explores how these reinforcement learning objectives perform across different model sizes and capabilitie (priors).
