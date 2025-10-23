@@ -52,7 +52,7 @@ We couldn't replicate the paper's parameters due to a lack of compute.
 2. **PSR (Positive Sample Reinforcement)**: Trains only on correct samples with +1.0 reward  
 3. **W-REINFORCE**: Weighted approach with +λ for correct, -1.0 for incorrect samples
 
-## 📊 Results (Pass#1)
+## 📊 Results (Pass@1)
 
 ### Training Curves
 
