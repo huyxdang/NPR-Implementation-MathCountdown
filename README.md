@@ -37,7 +37,6 @@ These models provide a good range of capabilities while maintaining the same arc
 - **Rollouts per Prompt**: 2
 - **Learning Rate**: 1e-6
 - **Gradient Accumulation Steps**: 2
-- **PPO Clip Range**: 0.2
 
 We couldn't replicate the paper's parameters due to a lack of compute. 
 
