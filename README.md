@@ -2,7 +2,7 @@
 
 ## 🎬 RLVR Decomposition Animation
 
-https://github.com/huyxdang/RLVR-Decomposed-Implementation/issues/1#issue-3542865802
+https://github.com/user-attachments/assets/60a33aeb-1cad-47d2-a3b1-29c0c6554579
 
 *This animation visualizes the decomposition of the RLVR objective into PSR (Positive Sample Reinforcement) and NSR (Negative Sample Reinforcement) components.*
 
